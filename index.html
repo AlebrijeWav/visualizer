@@ -557,6 +557,13 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     steps = i;
   }
 
+  // ===== SILHOUETTE COVERAGE (analytic AA via dmin) =====
+  // dmin = closest the march got to a surface. For a definite hit dmin is
+  // tiny; for a near-miss it's small but non-zero. Map it to a 0..1 coverage
+  // so silhouette edges fade smoothly into background instead of stair-stepping.
+  float aaW = 0.004 + 0.0035 * t;        // soft-edge width grows with distance
+  float coverage = 1.0 - smoothstep(0.0, aaW, dmin);
+
   if(hit){
     vec3 n = calcNormal(hitP, sIdx);
     vec3 v = -rd;
@@ -610,6 +617,9 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     vec3 fogCol = pal(uTime*0.03 + 0.6) * 0.35;
     float fogAmt = 1.0 - exp(-t * 0.11);
     col = mix(col, fogCol, fogAmt * 0.55);
+    // Apply silhouette coverage so the hit color fades to 0 at the edge
+    // instead of dropping to background in one pixel.
+    col *= coverage;
   }
   // Volumetric glow from near-misses — stronger on mid/treb for beat-sync feel
   float glow = exp(-dmin*3.5) * (0.18 + uMid*0.35 + uTreb*0.15);
@@ -976,8 +986,9 @@ void main(){
   fc += vec2(sin(fragUV.y*8.0 + uTime), cos(fragUV.x*8.0 + uTime*1.2)) * (0.002 + uTreb*0.004);
   vec2 prevUV = fc + 0.5;
 
-  // Feedback with per-channel offset for a subtle RGB smear in the trails
-  float caT = 0.0025 + uBeatDecay*0.006;
+  // Feedback with per-channel offset for a subtle RGB smear in the trails.
+  // Lowered — was accumulating fringe artifacts every frame.
+  float caT = 0.0008 + uBeatDecay*0.002;
   vec3 prev;
   prev.r = texture2D(uPrev, prevUV + vec2(caT, 0)).r;
   prev.g = texture2D(uPrev, prevUV).g;
@@ -1099,8 +1110,9 @@ const compMat = new THREE.ShaderMaterial({
       vec2 uv = gl_FragCoord.xy / uRes.xy;
       vec2 cuv = uv - 0.5;
 
-      // Sample original visual (with chromatic aberration)
-      float ca = 0.002 + uBass*0.006 + uBeat*0.012;
+      // Sample original visual with subtle chromatic aberration. Kept low
+      // so it doesn't amplify silhouette aliasing into RGB stair-steps.
+      float ca = 0.0006 + uBass*0.0018 + uBeat*0.004;
       vec2 dir = cuv * 2.0;
       vec3 mainOrig;
       mainOrig.r = texture2D(uMain, uv + dir*ca).r;
