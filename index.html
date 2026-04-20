@@ -56,7 +56,10 @@ display: flex; align-items: center; justify-content: space-between;
 .hint { margin-top: 32px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); text-align: center; line-height: 1.8; }
 .hint kbd { font-family: 'Courier New', monospace; padding: 2px 6px; border: 1px solid var(--line); margin: 0 2px; }
 
-input[type=file] { display: none; }
+input[type=file] {
+  position: absolute; left: -10000px; top: auto; width: 1px; height: 1px;
+  overflow: hidden; opacity: 0;
+}
 
 .hud { position: fixed; inset: 0; pointer-events: none; z-index: 10;
 padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 16px);
@@ -187,15 +190,14 @@ font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--
 
 /* Persistent diagnostic readout — helps debug mobile issues */
 #diag {
-position: fixed; left: 12px; right: 12px; bottom: 12px; z-index: 100;
-font-family: 'Courier New', monospace; font-size: 10px; line-height: 1.4;
-color: #ff3422; background: rgba(0,0,0,0.75);
-border: 1px solid rgba(255,52,34,0.5); border-radius: 4px;
-padding: 8px 10px; max-height: 140px; overflow-y: auto;
-display: none; white-space: pre-wrap; word-break: break-word;
+position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 9999;
+font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.5;
+color: #ff3422; background: #000;
+border: 2px solid #ff3422; border-radius: 4px;
+padding: 10px 12px; max-height: 180px; overflow-y: auto;
+display: block; white-space: pre-wrap; word-break: break-word;
 pointer-events: none;
 }
-#diag.show { display: block; }
 </style>
 
 </head>
@@ -1183,7 +1185,7 @@ function diag(msg){
   const ts = new Date().toISOString().substr(14, 8);
   diagLines.push(`${ts} ${msg}`);
   if(diagLines.length > 12) diagLines.shift();
-  if(diagEl){ diagEl.textContent = diagLines.join('\n'); diagEl.classList.add('show'); }
+  if(diagEl){ diagEl.textContent = diagLines.join('\n'); }
   try { console.log('[diag]', msg); } catch(_){}
 }
 window.addEventListener('error', e => {
@@ -1250,27 +1252,16 @@ let playOffset = 0;
 function startFile(file){
   diag('startFile enter');
   if(!file){ toast('no file selected'); return; }
-
-  // iOS sometimes reports empty/odd MIME types — accept by extension too
-  const name = (file.name || '').toLowerCase();
-  const audioExts = /\.(mp3|wav|m4a|aac|ogg|oga|flac|aiff|aif|opus|weba|webm|mp4)$/i;
-  const looksAudio = (file.type && file.type.startsWith('audio/')) || audioExts.test(name);
-  if(!looksAudio){
-    diag('rejected type: ' + (file.type || 'none') + ' name=' + name);
-    toast('not audio: ' + (file.type || 'unknown type'));
-    return;
-  }
-
-  // Clean up any prior playback
-  stopAllPlayback();
-
+  // No MIME-type gate — iOS returns empty types for many files. Let the
+  // decoder decide. Errors surface in the diag panel.
+  try { stopAllPlayback(); } catch(e){ diag('stopAll err: ' + e.message); }
   pendingFile = file;
-  setMode((file.name || 'audio').slice(0, 22));
-  hideStart();
-  showPlayOverlay();
+  try { setMode((file.name || 'audio').slice(0, 22)); } catch(_){}
+  try { hideStart(); } catch(e){ diag('hideStart err: ' + e.message); }
+  try { showPlayOverlay(); } catch(e){ diag('showOverlay err: ' + e.message); }
   isPaused = false;
-  updatePlayPauseIcon();
-  diag('overlay shown · tap to play');
+  try { updatePlayPauseIcon(); } catch(_){}
+  diag('OVERLAY SHOWN — tap screen to play');
 }
 
 function stopAllPlayback(){
