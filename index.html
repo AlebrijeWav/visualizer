@@ -547,11 +547,13 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     vec3 p = ro + rd*t;
     float d = sceneSDF(p, sIdx);
     dmin = min(dmin, d);
-    // Relative epsilon scales with distance to reduce aliasing at far ranges
-    float eps = 0.0008 + t * 0.00035;
+    // Tight relative epsilon — sharper silhouettes, less stair-step alias
+    float eps = 0.0005 + t * 0.00025;
     if(d < eps){ hit = true; hitP = p; steps = i; break; }
     if(t > 18.0) break;
-    t += d * 0.75;
+    // Slightly conservative step — reduces "skip past thin feature" misses
+    // that show up as ragged edges on struts/crystal points
+    t += d * 0.65;
     steps = i;
   }
 
@@ -1449,6 +1451,15 @@ let autoSinceSwitch = 0;
 let autoEnergyAcc = 0;
 let fwdPos = 0;            // accumulated fly-through position (smooth)
 let smoothedLevel = 0;     // heavily low-passed audio level for pacing
+// Two-stage smoothed camera targets (target → targetSmooth → actual) for
+// silk-smooth motion
+let smTargetRotX = 0, smTargetRotY = 0, smTargetZoom = 1.35;
+// Dramatic camera episodes — periodic bursts of extra motion for variety
+let dramaT = 0;            // time inside current episode (0 = idle)
+let dramaDur = 0;          // total duration of current episode
+let dramaNext = 10;        // seconds until next episode may trigger
+let dramaType = 0;         // 0=bank, 1=zoomPush, 2=zoomPull, 3=pitchDip
+let dramaYaw = 0, dramaPitch = 0, dramaZoom = 0; // current contributions
 let hudHidden = false;
 let lastInteract = performance.now();
 
@@ -1886,19 +1897,70 @@ function tick(){
   // Heavily low-pass the audio level so fly-through pacing doesn't jerk
   smoothedLevel += (visual.level - smoothedLevel) * Math.min(1, dt * 0.8);
 
-  // Smooth accumulated forward position — uses dt directly and a very
-  // gently modulated speed (slow filtered level). No per-frame audio jumps.
+  // Smooth accumulated forward position — never jumps with audio
   fwdPos += dt * (0.22 + smoothedLevel * 0.18);
   mainUniforms.uFwd.value = fwdPos;
 
-  // Camera: pure continuous yaw (always rotating forward, never swinging
-  // back), minimal pitch, gentle zoom breathe. Zero audio reactivity.
-  const zoomTarget = 1.35 + Math.sin(autoT * 0.05) * 0.18;
-  setZoomSmooth(zoomTarget, dt, 0.35);
+  // ----- Dramatic episode scheduler -----
+  // Every 12-22s, trigger a slow dramatic camera move on top of the base
+  // drift. Each episode eases in and out via a sine envelope.
+  if(dramaT >= dramaDur){
+    dramaNext -= dt;
+    if(dramaNext <= 0){
+      dramaT = 0;
+      dramaDur = 7 + Math.random() * 4;          // 7-11s
+      dramaNext = 12 + Math.random() * 10;       // gap before next
+      dramaType = Math.floor(Math.random() * 4);
+    }
+    dramaYaw = dramaPitch = dramaZoom = 0;
+  } else {
+    dramaT += dt;
+    const phase = dramaT / dramaDur;             // 0..1
+    const env = Math.sin(phase * Math.PI);       // 0 → 1 → 0 ease
+    if(dramaType === 0){
+      // Banking turn — extra yaw arc, one direction
+      const dir = (Math.floor(autoT * 0.1) % 2) ? 1 : -1;
+      dramaYaw   = env * 0.9 * dir;
+      dramaPitch = env * 0.04;
+      dramaZoom  = env * -0.08;
+    } else if(dramaType === 1){
+      // Zoom push-in — get up close to the geometry
+      dramaYaw   = 0;
+      dramaPitch = env * -0.05;
+      dramaZoom  = env * -0.55;
+    } else if(dramaType === 2){
+      // Zoom pull-back — wide reveal
+      dramaYaw   = env * 0.3;
+      dramaPitch = env *  0.06;
+      dramaZoom  = env *  0.55;
+    } else {
+      // Pitch dip — look up/down then return
+      const dir = (Math.floor(autoT * 0.07) % 2) ? 1 : -1;
+      dramaYaw   = env * 0.2 * dir;
+      dramaPitch = env * 0.18 * dir;
+      dramaZoom  = env * -0.05;
+    }
+  }
 
-  const targetRotY = autoT * 0.09;          // monotonic orbit
-  const targetRotX = Math.sin(autoT * 0.04) * 0.05;  // tiny pitch
-  setRotationSmooth(targetRotX, targetRotY, dt, 0.45);
+  // ----- Base camera path (smooth + monotonic) -----
+  const baseZoom = 1.4 + Math.sin(autoT * 0.05) * 0.12;
+  const baseRotY = autoT * 0.10;                              // continuous orbit
+  const baseRotX = Math.sin(autoT * 0.04) * 0.05;             // tiny pitch
+
+  // ----- Two-stage smoothing (target → smTarget → actual) -----
+  // First stage filters the raw target (incl. dramatic episode);
+  // second stage in setRotationSmooth/setZoomSmooth filters again.
+  // Result: silky smooth even on direction changes.
+  const targetZoomRaw = baseZoom + dramaZoom;
+  const targetRotYRaw = baseRotY + dramaYaw;
+  const targetRotXRaw = baseRotX + dramaPitch;
+  const k1 = 1 - Math.exp(-dt * 1.6);
+  smTargetZoom += (targetZoomRaw - smTargetZoom) * k1;
+  smTargetRotY += (targetRotYRaw - smTargetRotY) * k1;
+  smTargetRotX += (targetRotXRaw - smTargetRotX) * k1;
+
+  setZoomSmooth(smTargetZoom, dt, 0.6);
+  setRotationSmooth(smTargetRotX, smTargetRotY, dt, 0.7);
 
   // Dynamic feedback — longer trails when music is pumping, tighter when quiet
   const base = SCENES[currentScene].fb;
