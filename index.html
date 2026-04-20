@@ -1177,21 +1177,18 @@ const compMat = new THREE.ShaderMaterial({
 
 let audioCtx, analyser, sourceNode, mediaEl, micStream;
 
-// Persistent visible diagnostic — invaluable for debugging mobile issues.
-// Survives page lifetime. Toggle by tapping the page corner 4 times, or
-// auto-shows when an error is caught.
+// Persistent visible diagnostic — opt-in via URL hash (#debug). Otherwise
+// it stays completely hidden and diag() only writes to console.
 const diagEl = document.getElementById('diag');
 const diagLines = [];
+const diagEnabled = location.hash.indexOf('debug') !== -1;
 function diag(msg){
   const ts = new Date().toISOString().substr(14, 8);
   diagLines.push(`${ts} ${msg}`);
   if(diagLines.length > 12) diagLines.shift();
-  if(diagEl){
+  if(diagEnabled && diagEl){
     diagEl.textContent = diagLines.join('\n');
-    // Only surface the panel on real errors; normal flow stays console-only
-    if(/err|ERR|blocked|failed|rejected|PROMISE/i.test(msg)){
-      diagEl.classList.add('show');
-    }
+    diagEl.classList.add('show');
   }
   try { console.log('[diag]', msg); } catch(_){}
 }
