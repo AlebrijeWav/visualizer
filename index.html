@@ -1249,73 +1249,28 @@ let playOffset = 0;
 
 function startFile(file){
   diag('startFile enter');
-  if(!file){ diag('no file'); toast('no file selected'); return; }
+  if(!file){ toast('no file selected'); return; }
 
-  // Accept anything the user picked. iOS can hand back empty/weird MIME types
-  // (especially from iCloud Drive), so don't block on type checking — let the
-  // audio element decide if it's playable.
-  diag('accepting file: ' + (file.name || 'unnamed'));
+  // iOS sometimes reports empty/odd MIME types — accept by extension too
+  const name = (file.name || '').toLowerCase();
+  const audioExts = /\.(mp3|wav|m4a|aac|ogg|oga|flac|aiff|aif|opus|weba|webm|mp4)$/i;
+  const looksAudio = (file.type && file.type.startsWith('audio/')) || audioExts.test(name);
+  if(!looksAudio){
+    diag('rejected type: ' + (file.type || 'none') + ' name=' + name);
+    toast('not audio: ' + (file.type || 'unknown type'));
+    return;
+  }
 
   // Clean up any prior playback
-  try { stopAllPlayback(); } catch(e){ diag('stopAll err: ' + e.message); }
+  stopAllPlayback();
 
+  pendingFile = file;
   setMode((file.name || 'audio').slice(0, 22));
   hideStart();
+  showPlayOverlay();
   isPaused = false;
   updatePlayPauseIcon();
-
-  // Play via <audio> element — streams the file and works inside the
-  // file-picker user gesture on iOS. Much more reliable than decodeAudioData.
-  try {
-    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    diag('ctx state: ' + audioCtx.state);
-    if(audioCtx.state === 'suspended'){
-      audioCtx.resume().then(()=>diag('ctx resumed')).catch(e=>diag('resume err: ' + e.message));
-    }
-
-    const url = URL.createObjectURL(file);
-    diag('blob url ok');
-    mediaEl = new Audio();
-    mediaEl.src = url;
-    mediaEl.loop = true;
-    mediaEl.crossOrigin = 'anonymous';
-    mediaEl.preload = 'auto';
-    mediaEl.playsInline = true;
-
-    // Surface media-element errors visibly
-    mediaEl.addEventListener('error', () => {
-      const err = mediaEl.error;
-      diag('audio elem err: code=' + (err && err.code) + ' msg=' + (err && err.message));
-    });
-    mediaEl.addEventListener('canplay', () => diag('canplay'));
-    mediaEl.addEventListener('playing', () => diag('playing event'));
-
-    sourceNode = audioCtx.createMediaElementSource(mediaEl);
-    setupAnalyser(sourceNode);
-    analyser.connect(audioCtx.destination);
-    diag('graph wired');
-
-    toast('loading ' + (file.name || '').slice(0, 18));
-
-    const p = mediaEl.play();
-    if(p && p.then){
-      p.then(() => {
-        diag('play() resolved');
-        toast('playing · ' + (file.name || '').slice(0, 18));
-      }).catch(err => {
-        diag('play() blocked: ' + (err && err.name) + ' — showing overlay');
-        pendingFile = file;
-        showPlayOverlay();
-      });
-    } else {
-      diag('play() returned no promise');
-    }
-  } catch(err){
-    diag('startFile threw: ' + (err && err.message));
-    toast('audio setup failed — tap to play');
-    pendingFile = file;
-    showPlayOverlay();
-  }
+  diag('overlay shown · tap to play');
 }
 
 function stopAllPlayback(){
@@ -1327,19 +1282,20 @@ function stopAllPlayback(){
 
 // Called from a real user gesture (tap on play overlay)
 async function actuallyStartPlayback(){
-  if(!pendingFile) return;
+  diag('overlay tapped');
+  if(!pendingFile){ diag('no pendingFile'); return; }
 
   try {
     audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
   } catch(e){
+    diag('ctx create err: ' + e.message);
     toast('audio not supported');
-    console.error(e);
     return;
   }
 
-  // Resume context inside the gesture — iOS REQUIRES this here
+  diag('ctx state pre-resume: ' + audioCtx.state);
   if(audioCtx.state === 'suspended'){
-    try { await audioCtx.resume(); } catch(_){}
+    try { await audioCtx.resume(); diag('ctx resumed'); } catch(e){ diag('resume err: ' + e.message); }
   }
 
   // CRITICAL: play a silent buffer immediately to fully unlock iOS audio output
@@ -1352,31 +1308,30 @@ async function actuallyStartPlayback(){
   } catch(e){ console.warn('silent unlock failed', e); }
 
   toast('decoding...');
+  diag('reading ' + (pendingFile.size || 0) + 'b');
 
-  // Read file as ArrayBuffer
   let arrayBuffer;
   try {
     arrayBuffer = await pendingFile.arrayBuffer();
+    diag('read ok: ' + arrayBuffer.byteLength + 'b');
   } catch(e){
+    diag('read err: ' + e.message);
     toast('cant read file');
-    console.error(e);
     return;
   }
 
-  // Decode with Web Audio (way more reliable on iOS than <audio src=blob:>)
   try {
-    // Some Safari versions need the callback form
     decodedBuffer = await new Promise((resolve, reject) => {
       const p = audioCtx.decodeAudioData(arrayBuffer, resolve, reject);
       if(p && p.then) p.then(resolve, reject);
     });
+    diag('decoded ' + decodedBuffer.duration.toFixed(1) + 's');
   } catch(e){
+    diag('decode err: ' + ((e && e.message) || e));
     toast('cant decode: try wav or different mp3');
-    console.error('decode failed', e);
     return;
   }
 
-  // Build playback graph
   try {
     bufferSource = audioCtx.createBufferSource();
     bufferSource.buffer = decodedBuffer;
@@ -1397,10 +1352,11 @@ async function actuallyStartPlayback(){
     playStartTime = audioCtx.currentTime;
 
     hidePlayOverlay();
+    diag('playing');
     toast('playing · ' + (pendingFile.name || '').slice(0, 18));
   } catch(e){
+    diag('playback err: ' + e.message);
     toast('playback failed');
-    console.error(e);
   }
 }
 
