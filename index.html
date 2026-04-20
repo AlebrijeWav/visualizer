@@ -905,7 +905,7 @@ vec3 sceneGlyphs(vec2 uv){
   return col;
 }
 
-// Dispatches to the right scene. `uv` is centered/normalized; `zuv` is the
+// Dispatches to the right scene. uv is centered/normalized; zuv is the
 // zoomed/rotated uv used for the 2D patterns.
 vec3 renderScene(vec2 uv, vec2 zuv, int sIdx){
   if(sIdx == 0)      return raymarch3D(uv, 0); // lattice
