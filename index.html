@@ -70,6 +70,7 @@ transition: opacity 0.5s ease;
 .hud.hidden { opacity: 0 !important; }
 
 .top, .bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.bottom-group { display: flex; flex-direction: column; gap: 0; }
 
 .stamp {
 font-family: 'Times New Roman', serif; font-style: italic; font-size: 13px; line-height: 1.2;
@@ -273,26 +274,28 @@ pointer-events: none;
       FPS <s id="fps">00</s>
     </div>
   </div>
-  <div class="bottom">
-    <div class="scene-info">
-      <div class="stamp"><b>now playing</b><i id="scene-name">—</i></div>
+  <div class="bottom-group">
+    <div class="bottom">
+      <div class="scene-info">
+        <div class="stamp"><b>now playing</b><i id="scene-name">—</i></div>
+      </div>
+      <div class="controls">
+        <button class="ctrl" id="playpause" aria-label="Play/Pause">
+          <svg viewBox="0 0 24 24" fill="currentColor" id="playpauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+        </button>
+        <button class="ctrl" id="full" aria-label="Fullscreen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+        </button>
+        <button class="ctrl" id="hide" aria-label="Hide HUD">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+        </button>
+      </div>
     </div>
-    <div class="controls">
-      <button class="ctrl" id="playpause" aria-label="Play/Pause">
-        <svg viewBox="0 0 24 24" fill="currentColor" id="playpauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
-      </button>
-      <button class="ctrl" id="full" aria-label="Fullscreen">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
-      </button>
-      <button class="ctrl" id="hide" aria-label="Hide HUD">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
-      </button>
+    <div class="timeline" id="timeline" hidden>
+      <span class="t-label" id="tCur">0:00</span>
+      <canvas id="waveCanvas" aria-label="Seek waveform"></canvas>
+      <span class="t-label" id="tDur">0:00</span>
     </div>
-  </div>
-  <div class="timeline" id="timeline" hidden>
-    <span class="t-label" id="tCur">0:00</span>
-    <canvas id="waveCanvas" aria-label="Seek waveform"></canvas>
-    <span class="t-label" id="tDur">0:00</span>
   </div>
 </div>
 
