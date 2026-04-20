@@ -33,28 +33,28 @@ transition: opacity 0.4s ease, transform 0.4s ease;
 }
 .start.hidden { opacity: 0; pointer-events: none; transform: scale(1.02); }
 .start h1 {
-font-family: ‘Times New Roman’, serif;
+font-family: 'Times New Roman', serif;
 font-weight: 400; font-size: clamp(48px, 12vw, 84px);
 line-height: 0.9; letter-spacing: -0.03em;
 margin-bottom: 8px;
 }
-.start h1 em { color: var(–accent); font-style: italic; }
-.start .tag { font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; color: var(–muted); margin-bottom: 56px; }
+.start h1 em { color: var(--accent); font-style: italic; }
+.start .tag { font-size: 10px; letter-spacing: 0.4em; text-transform: uppercase; color: var(--muted); margin-bottom: 56px; }
 .actions { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 320px; }
 .action {
-background: transparent; color: var(–paper);
-border: 1px solid var(–paper); padding: 18px 20px;
-font-family: ‘Courier New’, monospace; font-size: 12px;
+background: transparent; color: var(--paper);
+border: 1px solid var(--paper); padding: 18px 20px;
+font-family: 'Courier New', monospace; font-size: 12px;
 letter-spacing: 0.28em; text-transform: uppercase;
 cursor: pointer; transition: all 0.15s ease; text-align: left;
 display: flex; align-items: center; justify-content: space-between;
 }
-.action:hover, .action:active { background: var(–paper); color: var(–ink); }
-.action.primary { border-color: var(–accent); color: var(–accent); }
-.action.primary:hover, .action.primary:active { background: var(–accent); color: var(–ink); }
+.action:hover, .action:active { background: var(--paper); color: var(--ink); }
+.action.primary { border-color: var(--accent); color: var(--accent); }
+.action.primary:hover, .action.primary:active { background: var(--accent); color: var(--ink); }
 .action svg { width: 14px; height: 14px; }
-.hint { margin-top: 32px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(–muted); text-align: center; line-height: 1.8; }
-.hint kbd { font-family: ‘Courier New’, monospace; padding: 2px 6px; border: 1px solid var(–line); margin: 0 2px; }
+.hint { margin-top: 32px; font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); text-align: center; line-height: 1.8; }
+.hint kbd { font-family: 'Courier New', monospace; padding: 2px 6px; border: 1px solid var(--line); margin: 0 2px; }
 
 input[type=file] { display: none; }
 
@@ -69,19 +69,19 @@ transition: opacity 0.5s ease;
 .top, .bottom { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
 
 .stamp {
-font-family: ‘Times New Roman’, serif; font-style: italic; font-size: 13px; line-height: 1.2;
+font-family: 'Times New Roman', serif; font-style: italic; font-size: 13px; line-height: 1.2;
 padding: 4px 0;
 }
 .stamp b { display: block; font-style: normal; font-weight: 400;
-font-family: ‘Courier New’, monospace; font-size: 9px;
-letter-spacing: 0.32em; text-transform: uppercase; color: var(–muted); margin-bottom: 4px;
+font-family: 'Courier New', monospace; font-size: 9px;
+letter-spacing: 0.32em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;
 }
 .back-btn {
 display: inline-flex; align-items: center; gap: 8px;
 background: rgba(0, 0, 0, 0.55);
-border: 1px solid var(–accent);
-color: var(–accent);
-font-family: ‘Courier New’, monospace;
+border: 1px solid var(--accent);
+color: var(--accent);
+font-family: 'Courier New', monospace;
 font-size: 11px;
 letter-spacing: 0.28em;
 text-transform: uppercase;
@@ -97,32 +97,32 @@ width: 14px; height: 14px;
 flex-shrink: 0;
 }
 .back-btn:hover, .back-btn:active {
-background: var(–accent);
+background: var(--accent);
 color: #000;
 }
 
-.meta { text-align: right; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(–muted); line-height: 1.9; }
-.meta s { text-decoration: none; color: var(–paper); }
+.meta { text-align: right; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); line-height: 1.9; }
+.meta s { text-decoration: none; color: var(--paper); }
 
 .scene-info { display: flex; align-items: flex-end; }
 .controls {
 pointer-events: auto;
 display: flex; gap: 4px; padding: 4px;
 background: rgba(0,0,0,0.5); backdrop-filter: blur(12px);
-border: 1px solid var(–line);
+border: 1px solid var(--line);
 }
 .ctrl {
-background: transparent; color: var(–paper); border: none;
+background: transparent; color: var(--paper); border: none;
 width: 44px; height: 44px;
 display: flex; align-items: center; justify-content: center;
 cursor: pointer; transition: all 0.15s ease;
 }
 .ctrl:hover, .ctrl:active { background: rgba(242,239,230,0.12); }
-.ctrl.active { background: var(–accent); color: #000; }
+.ctrl.active { background: var(--accent); color: #000; }
 .ctrl svg { width: 18px; height: 18px; stroke-width: 1.6; }
 
 .x { position: fixed; width: 12px; height: 12px; opacity: 0.35; z-index: 5; pointer-events: none; transition: opacity 0.5s; }
-.x::before, .x::after { content: ‘’; position: absolute; background: var(–paper); }
+.x::before, .x::after { content: ''; position: absolute; background: var(--paper); }
 .x::before { width: 12px; height: 1px; top: 0; }
 .x::after { width: 1px; height: 12px; left: 0; }
 .x.tl { top: 8px; left: 8px; }
@@ -131,7 +131,7 @@ cursor: pointer; transition: all 0.15s ease;
 .x.br { bottom: 8px; right: 8px; transform: scale(-1,-1); }
 
 .toast { position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%) translateY(8px);
-background: rgba(0,0,0,0.85); border: 1px solid var(–accent); color: var(–accent);
+background: rgba(0,0,0,0.85); border: 1px solid var(--accent); color: var(--accent);
 padding: 10px 18px; font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
 z-index: 40; opacity: 0; transition: all 0.25s ease; pointer-events: none; white-space: nowrap;
 }
@@ -143,10 +143,10 @@ background: radial-gradient(circle at center, rgba(255,52,34,0.2), transparent 6
 .paste-pulse.show { animation: pulseFade 0.8s ease forwards; }
 @keyframes pulseFade { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
 
-.drop { position: fixed; inset: 16px; border: 2px dashed var(–accent); z-index: 28;
+.drop { position: fixed; inset: 16px; border: 2px dashed var(--accent); z-index: 28;
 display: none; align-items: center; justify-content: center;
 background: rgba(255,52,34,0.08); backdrop-filter: blur(4px);
-font-family: ‘Times New Roman’, serif; font-style: italic; font-size: 28px; color: var(–accent);
+font-family: 'Times New Roman', serif; font-style: italic; font-size: 28px; color: var(--accent);
 pointer-events: none;
 }
 .drop.show { display: flex; }
@@ -167,9 +167,9 @@ cursor: pointer;
 #playOverlay.show { opacity: 1; }
 .play-card { text-align: center; padding: 32px; pointer-events: none; }
 .play-circle {
-width: 96px; height: 96px; border: 2px solid var(–accent); border-radius: 50%;
+width: 96px; height: 96px; border: 2px solid var(--accent); border-radius: 50%;
 display: flex; align-items: center; justify-content: center;
-margin: 0 auto 24px; color: var(–accent);
+margin: 0 auto 24px; color: var(--accent);
 animation: pulseRing 2s ease-in-out infinite;
 }
 .play-circle svg { width: 40px; height: 40px; margin-left: 4px; }
@@ -178,11 +178,11 @@ animation: pulseRing 2s ease-in-out infinite;
 50%      { transform: scale(1.05); box-shadow: 0 0 0 18px rgba(255,52,34,0); }
 }
 .play-label {
-font-family: ‘Times New Roman’, serif; font-style: italic; font-size: 28px; color: var(–paper);
+font-family: 'Times New Roman', serif; font-style: italic; font-size: 28px; color: var(--paper);
 margin-bottom: 12px;
 }
 .play-hint {
-font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(–muted);
+font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--muted);
 }
 </style>
 
@@ -471,14 +471,42 @@ float sceneSDF(vec3 p, int sIdx){
 }
 
 vec3 calcNormal(vec3 p, int sIdx){
-  vec2 e = vec2(0.001, 0.0);
-  float d = sceneSDF(p, sIdx);
-  vec3 n = vec3(
-    sceneSDF(p+e.xyy, sIdx),
-    sceneSDF(p+e.yxy, sIdx),
-    sceneSDF(p+e.yyx, sIdx)
+  // Tetrahedral gradient — 4 taps, slightly more stable than 3-tap fwd diff
+  const float e = 0.0015;
+  vec2 k = vec2(1.0, -1.0);
+  return normalize(
+    k.xyy * sceneSDF(p + k.xyy*e, sIdx) +
+    k.yyx * sceneSDF(p + k.yyx*e, sIdx) +
+    k.yxy * sceneSDF(p + k.yxy*e, sIdx) +
+    k.xxx * sceneSDF(p + k.xxx*e, sIdx)
   );
-  return normalize(n - d);
+}
+
+// 5-tap occlusion sampler — queries SDF along the normal for proper AO
+float calcAO(vec3 p, vec3 n, int sIdx){
+  float occ = 0.0;
+  float sca = 1.0;
+  for(int i=0; i<5; i++){
+    float h = 0.02 + 0.08 * float(i);
+    float d = sceneSDF(p + n*h, sIdx);
+    occ += (h - d) * sca;
+    sca *= 0.75;
+  }
+  return clamp(1.0 - 1.2*occ, 0.0, 1.0);
+}
+
+// Cheap soft shadow via SDF min-distance penumbra
+float softShadow(vec3 ro, vec3 rd, int sIdx){
+  float res = 1.0;
+  float t = 0.02;
+  for(int i=0; i<14; i++){
+    float h = sceneSDF(ro + rd*t, sIdx);
+    if(h < 0.001) return 0.0;
+    res = min(res, 10.0*h/t);
+    t += clamp(h, 0.04, 0.35);
+    if(t > 6.0) break;
+  }
+  return clamp(res, 0.0, 1.0);
 }
 
 vec3 raymarch3D(vec2 uv, int sIdx){
@@ -518,46 +546,75 @@ vec3 raymarch3D(vec2 uv, int sIdx){
   bool hit = false;
   vec3 hitP;
   int steps = 0;
-  for(int i=0; i<120; i++){
+  for(int i=0; i<128; i++){
     vec3 p = ro + rd*t;
     float d = sceneSDF(p, sIdx);
     dmin = min(dmin, d);
-    if(d < 0.001){ hit = true; hitP = p; steps = i; break; }
-    if(t > 16.0) break;
-    t += d * 0.65;
+    // Relative epsilon scales with distance to reduce aliasing at far ranges
+    float eps = 0.0008 + t * 0.00035;
+    if(d < eps){ hit = true; hitP = p; steps = i; break; }
+    if(t > 18.0) break;
+    t += d * 0.75;
     steps = i;
   }
 
   if(hit){
     vec3 n = calcNormal(hitP, sIdx);
-    vec3 lightDir = normalize(vec3(0.6, 0.8, -0.5));
-    float diff = max(0.0, dot(n, lightDir));
-    float spec = pow(max(0.0, dot(reflect(-lightDir, n), -rd)), 48.0);
-    float ao = 1.0 - float(steps)/120.0;
+    vec3 v = -rd;
 
-    float pt = t*0.08 + n.x*0.2 + n.y*0.15 + uTime*0.04 + uBass*0.3;
+    // Two-light rig: warm key + cool fill
+    vec3 keyDir  = normalize(vec3(0.55, 0.85, -0.6));
+    vec3 fillDir = normalize(vec3(-0.7, 0.15, -0.4));
+    vec3 keyCol  = vec3(1.05, 0.95, 0.82);
+    vec3 fillCol = vec3(0.55, 0.70, 1.10);
+
+    float ndotK = max(0.0, dot(n, keyDir));
+    float ndotF = max(0.0, dot(n, fillDir));
+
+    // Soft shadow only from the key — fill stays unshadowed
+    float sh = softShadow(hitP + n*0.01, keyDir, sIdx);
+    sh = mix(0.4, 1.0, sh);
+
+    float ao = calcAO(hitP, n, sIdx);
+
+    // Blinn-Phong specular for a tighter highlight
+    vec3 hK = normalize(keyDir + v);
+    float specK = pow(max(0.0, dot(n, hK)), 64.0) * sh;
+    vec3 hF = normalize(fillDir + v);
+    float specF = pow(max(0.0, dot(n, hF)), 24.0) * 0.4;
+
+    // Palette-driven surface color, animated by position + bass
+    float pt = t*0.06 + n.x*0.25 + n.y*0.18 + uTime*0.04 + uBass*0.3;
     vec3 base = pal(pt);
-    vec3 rim = pal(pt + 0.5);
+    vec3 rim  = pal(pt + 0.5);
 
-    col = base * (0.15 + diff*0.55) * ao;
-    col += spec * rim * 0.35;
-    float edge = 1.0 - max(0.0, dot(n, -rd));
-    col += pal(pt + 0.3) * pow(edge, 4.0) * (0.2 + uMid*0.4);
+    // Lambert diffuse from two lights
+    vec3 diffuse  = base * keyCol  * ndotK * sh * 0.75;
+    diffuse      += base * fillCol * ndotF       * 0.35;
+    // Ambient from palette so shadows stay colored, not black
+    vec3 ambient  = base * vec3(0.12, 0.14, 0.18) * ao;
+
+    col = diffuse * ao + ambient;
+    col += rim * (specK + specF) * (0.5 + uTreb*0.5);
+
+    // Fresnel rim — stronger on grazing angles, tinted by complementary palette
+    float fres = pow(1.0 - max(0.0, dot(n, v)), 3.5);
+    col += pal(pt + 0.3) * fres * (0.25 + uMid*0.5);
 
     // ===== NEAR-CLIP FADE =====
-    // When hit is very close, fade to black to prevent flat color floods
-    // when the camera ends up flush against a surface.
-    float nearFade = smoothstep(0.0, 0.6, t);
+    // Narrow window — fade only when almost touching surface
+    float nearFade = smoothstep(0.0, 0.35, t);
     col *= nearFade;
 
     // ===== DISTANCE FOG =====
-    // Also fade with distance for depth — keeps things from looking flat.
-    float fogDepth = exp(-t * 0.12);
-    col *= mix(0.4, 1.0, fogDepth);
+    // Tinted fog using a slowly shifting palette color — adds depth + mood
+    vec3 fogCol = pal(uTime*0.03 + 0.6) * 0.35;
+    float fogAmt = 1.0 - exp(-t * 0.11);
+    col = mix(col, fogCol, fogAmt * 0.55);
   }
-  // Volumetric glow from near-misses
-  float glow = exp(-dmin*4.0) * (0.15 + uMid*0.3);
-  col += pal(uTime*0.07 + 0.4) * glow * 0.25;
+  // Volumetric glow from near-misses — stronger on mid/treb for beat-sync feel
+  float glow = exp(-dmin*3.5) * (0.18 + uMid*0.35 + uTreb*0.15);
+  col += pal(uTime*0.07 + 0.4) * glow * 0.35;
   return col;
 }
 
@@ -592,10 +649,6 @@ vec3 sceneGlitch(vec2 uv){
   if(cellH1 < 0.4){
     shape1 = smoothstep(0.46, 0.42, max(abs(g1.x), abs(g1.y))); // box
   } else if(cellH1 < 0.75){
-    float plus = min(
-      smoothstep(0.42, 0.38, abs(g1.x)) * step(abs(g1.y), 0.12),
-      smoothstep(0.42, 0.38, abs(g1.y)) * step(abs(g1.x), 0.12)
-    );
     shape1 = max(
       smoothstep(0.42, 0.38, abs(g1.x)) * step(abs(g1.y), 0.12),
       smoothstep(0.42, 0.38, abs(g1.y)) * step(abs(g1.x), 0.12)
@@ -883,22 +936,26 @@ void main(){
   fc += vec2(sin(fragUV.y*8.0 + uTime), cos(fragUV.x*8.0 + uTime*1.2)) * (0.002 + uTreb*0.004);
   vec2 prevUV = fc + 0.5;
 
+  // Feedback with per-channel offset for a subtle RGB smear in the trails
+  float caT = 0.0025 + uBeatDecay*0.006;
   vec3 prev;
-  prev.r = texture2D(uPrev, prevUV + vec2(0.002, 0)).r;
+  prev.r = texture2D(uPrev, prevUV + vec2(caT, 0)).r;
   prev.g = texture2D(uPrev, prevUV).g;
-  prev.b = texture2D(uPrev, prevUV - vec2(0.002, 0)).b;
+  prev.b = texture2D(uPrev, prevUV - vec2(caT, 0)).b;
 
-  // Decay trails each frame
-  prev = max(prev, 0.0) * uFeedback;
+  // Soft-decay trails: multiplicative feedback with luminance-based limiter
+  // Prevents runaway buildup while keeping highlight persistence
+  prev *= uFeedback;
+  float prevLum = dot(prev, vec3(0.299, 0.587, 0.114));
+  prev *= 1.0 - smoothstep(0.9, 1.3, prevLum) * 0.5;
 
-  // Reduced trail mix and tighter clamp to prevent buildup to white
-  col = col + prev * 0.5;
-  col = clamp(col, 0.0, 1.4);
+  // Screen-like blend preserves HDR headroom (bloom can still pick up highlights)
+  col = col + prev * 0.55 - col * prev * 0.20;
 
-  // Beat punch
-  col = mix(col, 1.0 - col, uBeat * 0.25);
+  // Beat punch — inverted color flash on strong beats
+  col = mix(col, 1.0 - col, uBeat * 0.22);
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(max(col, 0.0), 1.0);
 }
 `;
 
@@ -906,20 +963,27 @@ const mainMat = new THREE.ShaderMaterial({ uniforms: mainUniforms, vertexShader:
 const mainMesh = new THREE.Mesh(quadGeo, mainMat);
 sceneFs.add(mainMesh);
 
-const brightUniforms = { uTex:{value:null}, uThresh:{value:0.95}, uRes:{value:new THREE.Vector2()} };
+const brightUniforms = { uTex:{value:null}, uThresh:{value:0.75}, uRes:{value:new THREE.Vector2()} };
 const brightMat = new THREE.ShaderMaterial({
   uniforms: brightUniforms,
   vertexShader: 'void main(){gl_Position=vec4(position,1.);}',
   fragmentShader: `
     precision highp float;
     uniform sampler2D uTex; uniform float uThresh; uniform vec2 uRes;
+    // Soft-knee threshold (Karis/COD-style) — smoother bloom onset than step()
     void main(){
       vec2 uv = gl_FragCoord.xy / uRes.xy;
       vec3 c = texture2D(uTex, uv).rgb;
-      float l = dot(c, vec3(0.299,0.587,0.114));
-      float k = smoothstep(uThresh, uThresh+0.30, l);
-      // Cap intensity tighter to prevent any white explosion
-      gl_FragColor = vec4(min(c * k * 0.6, vec3(1.0)), 1.0);
+      float brightness = max(max(c.r, c.g), c.b);
+      float knee = 0.25;
+      float soft = brightness - uThresh + knee;
+      soft = clamp(soft, 0.0, 2.0*knee);
+      soft = soft * soft / (4.0 * knee + 0.0001);
+      float contribution = max(soft, brightness - uThresh) / max(brightness, 0.0001);
+      // Karis average — weight by inverse luminance to stop fireflies
+      float lum = dot(c, vec3(0.299, 0.587, 0.114));
+      float weight = 1.0 / (1.0 + lum);
+      gl_FragColor = vec4(c * contribution * weight * 1.4, 1.0);
     }
   `
 });
@@ -1034,23 +1098,40 @@ const compMat = new THREE.ShaderMaterial({
 
       vec3 main = mix(mainOrig, mainK, k);
 
-      // Bloom
-      vec3 bloom = texture2D(uBloom, uv).rgb * 0.20 + texture2D(uBloom2, uv).rgb * 0.15;
-      vec3 col = main + bloom * (0.3 + uMid*0.2);
+      // Bloom — mix two mips for a broader, more filmic glow
+      vec3 bloomNear = texture2D(uBloom,  uv).rgb;
+      vec3 bloomFar  = texture2D(uBloom2, uv).rgb;
+      vec3 bloom = bloomNear * 0.40 + bloomFar * 0.55;
+      vec3 col = main + bloom * (0.28 + uMid*0.18 + uBeat*0.12);
 
-      // Vignette
-      float vig = 1.0 - dot(cuv, cuv) * 0.9;
-      col *= vig;
+      // Subtle color grade: gentle teal/orange split
+      vec3 shadowTint    = vec3(0.88, 0.95, 1.08);   // cool shadows
+      vec3 highlightTint = vec3(1.08, 0.98, 0.88);   // warm highlights
+      float lum = dot(col, vec3(0.299, 0.587, 0.114));
+      float mixAmt = smoothstep(0.0, 0.7, lum);
+      col *= mix(shadowTint, highlightTint, mixAmt);
 
-      // ACES tone mapping
-      col = aces(col * 0.85);
+      // Smooth vignette — gentle falloff from center to corners
+      float vigDist = length(cuv) * 1.6;
+      float vig = 1.0 - smoothstep(0.55, 1.15, vigDist);
+      col *= mix(0.55, 1.0, vig);
 
-      // Grain
-      float g = hash(gl_FragCoord.xy + uTime*40.0);
-      col += (g - 0.5) * 0.04;
+      // Exposure + ACES tone mapping
+      float exposure = 1.05 + uBeat * 0.15;
+      col = aces(col * exposure);
 
-      // Light gamma
-      col = pow(max(col, 0.0), vec3(0.92));
+      // Saturation boost — palette colors pop without clipping
+      float l = dot(col, vec3(0.299, 0.587, 0.114));
+      col = mix(vec3(l), col, 1.18);
+
+      // Dithered grain — uses time-animated hash, amount tied to luminance
+      // so shadows dither more (where banding shows) and highlights stay clean
+      float g = hash(gl_FragCoord.xy + fract(uTime) * 73.0);
+      float grainAmt = mix(0.03, 0.015, smoothstep(0.0, 0.4, l));
+      col += (g - 0.5) * grainAmt;
+
+      // Light gamma for richer mids
+      col = pow(max(col, 0.0), vec3(0.94));
 
       gl_FragColor = vec4(col, 1.0);
     }
