@@ -190,13 +190,13 @@ font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--
 
 /* Persistent diagnostic readout — helps debug mobile issues */
 #diag {
-position: fixed; left: 8px; right: 8px; bottom: 8px; z-index: 9999;
-font-family: 'Courier New', monospace; font-size: 11px; line-height: 1.5;
-color: #ff3422; background: #000;
-border: 2px solid #ff3422; border-radius: 4px;
-padding: 10px 12px; max-height: 180px; overflow-y: auto;
+position: fixed; left: 0; right: 0; top: 0; z-index: 99999;
+font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.5;
+color: #00ff88; background: #000;
+border-bottom: 2px solid #00ff88;
+padding: env(safe-area-inset-top, 8px) 10px 8px 10px;
+max-height: 45vh; overflow-y: auto;
 display: block; white-space: pre-wrap; word-break: break-word;
-pointer-events: none;
 }
 </style>
 
@@ -215,10 +215,10 @@ pointer-events: none;
       <span>live mic</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
     </button>
-    <label class="action" for="file">
+    <button class="action" id="fileBtn" type="button">
       <span>audio file</span>
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18V5l12-2v13M9 9l12-2M6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 19a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
-    </label>
+    </button>
     <input type="file" id="file" />
     <button class="action" id="paste">
       <span>paste / drop</span>
@@ -1526,8 +1526,21 @@ function toast(msg){
   toast._t = setTimeout(()=>toastEl.classList.remove('show'), 1800);
 }
 
-// Log label taps too — lets us confirm the tap reaches the label
-document.querySelector('label[for="file"]').addEventListener('click', () => diag('audio-file label tapped'));
+// File-pick button — programmatically opens the native file picker.
+// More reliable than label[for] on some mobile browsers.
+const fileBtn = document.getElementById('fileBtn');
+const fileInput = document.getElementById('file');
+if(fileBtn && fileInput){
+  fileBtn.addEventListener('click', () => {
+    diag('audio-file button tapped → opening picker');
+    try {
+      fileInput.value = ''; // allow re-picking the same file
+      fileInput.click();
+    } catch(e){
+      diag('input.click() err: ' + e.message);
+    }
+  });
+}
 document.getElementById('mic').addEventListener('click', startMic);
 document.getElementById('file').addEventListener('change', e => {
   const f = e.target.files && e.target.files[0];
