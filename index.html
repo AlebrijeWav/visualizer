@@ -236,15 +236,6 @@ font-size: 9px; letter-spacing: 0.28em; text-transform: uppercase; color: var(--
       <button class="ctrl" id="playpause" aria-label="Play/Pause">
         <svg viewBox="0 0 24 24" fill="currentColor" id="playpauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
       </button>
-      <button class="ctrl" id="prev" aria-label="Previous">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <button class="ctrl" id="next" aria-label="Next">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M9 18l6-6-6-6"/></svg>
-      </button>
-      <button class="ctrl" id="auto" aria-label="Auto cycle">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 12a9 9 0 1 1-3-6.7L21 8M21 3v5h-5"/></svg>
-      </button>
       <button class="ctrl" id="full" aria-label="Fullscreen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
       </button>
@@ -295,7 +286,9 @@ const mainUniforms = {
   uTime:{value:0}, uRes:{value:new THREE.Vector2()},
   uBass:{value:0}, uMid:{value:0}, uTreb:{value:0}, uLevel:{value:0},
   uBeat:{value:0}, uBeatDecay:{value:0},
-  uScene:{value:0}, uHue:{value:0},
+  // Dual-scene crossfade: uSceneMix 0 = pure A, 1 = pure B, interp between.
+  uSceneA:{value:0}, uSceneB:{value:0}, uSceneMix:{value:0},
+  uHue:{value:0},
   uPrev:{value:null}, uFeedback:{value:0.92}, uWarp:{value:0.004},
   uPalette:{value:0}, uZoom:{value:1.0},
   uRotX:{value:0}, uRotY:{value:0},
@@ -306,7 +299,8 @@ precision highp float;
 
 uniform vec2  uRes;
 uniform float uTime, uBass, uMid, uTreb, uLevel, uBeat, uBeatDecay;
-uniform float uScene, uHue, uFeedback, uWarp, uPalette, uZoom;
+uniform float uSceneA, uSceneB, uSceneMix;
+uniform float uHue, uFeedback, uWarp, uPalette, uZoom;
 uniform float uRotX, uRotY;
 uniform sampler2D uPrev;
 
@@ -354,9 +348,9 @@ vec2 kaleido(vec2 p, float n){
 }
 
 float mapLattice(vec3 p){
-  // Slow forward flight + drift rotation
-  p.z += uTime * 0.20;
-  p.xz *= rot(uTime*0.03 + uBass*0.08);
+  // Slow forward flight + drift rotation — both scale with level for pace
+  p.z += uTime * (0.20 + uLevel * 0.20);
+  p.xz *= rot(uTime*0.04 + uBass*0.20 + uLevel*0.06);
   p.xy *= rot(uTime*0.02);
 
   float CELL = 1.4;
@@ -364,9 +358,8 @@ float mapLattice(vec3 p){
   vec3 q1 = mod(p + CELL*0.5, CELL) - CELL*0.5;
   float cellH = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
 
-  // Single shape per cell — octahedron, with size that varies smoothly per cell
-  // (Avoids step()-based blending which creates SDF discontinuities)
-  float shapeSize = 0.22 + cellH * 0.12 + uBass * 0.10;
+  // Shape size pumps strongly with bass; beats punch it further
+  float shapeSize = 0.20 + cellH * 0.14 + uBass * 0.24 + uBeatDecay * 0.08;
   float oct = sdOct(q1, shapeSize);
 
   // Connecting struts — thin square cross-section bars along axes
@@ -385,61 +378,52 @@ float mapLattice(vec3 p){
 }
 
 float mapPlasma(vec3 p){
-  // Architectural cross/plus structure with flythrough motion
-  p.z += uTime * 0.18;
+  // Architectural cross/plus structure with flythrough motion — pace with level
+  p.z += uTime * (0.18 + uLevel * 0.15);
   p.x += sin(uTime*0.15) * 0.4;
   p.y += cos(uTime*0.12) * 0.3;
 
-  p.xz *= rot(uTime*0.03);
-  p.xy *= rot(uTime*0.02);
+  p.xz *= rot(uTime*0.04 + uBass*0.15);
+  p.xy *= rot(uTime*0.02 + uMid*0.08);
 
   // Two scales of crosses, well-spaced
   vec3 q1 = mod(p + 1.0, 2.0) - 1.0;
   vec3 q2 = mod(p + 0.35, 0.7) - 0.35;
 
-  float c1 = sdCross(q1, 0.22 + 0.08*uBass);
-  float c2 = sdCross(q2, 0.08 + 0.03*uMid);
+  float c1 = sdCross(q1, 0.22 + 0.18*uBass + 0.08*uBeatDecay);
+  float c2 = sdCross(q2, 0.08 + 0.06*uMid  + 0.03*uBeatDecay);
 
-  // Smooth union — inner detail crosses sit on the main cross
   float d = smin(c1, c2, 0.04);
   return d;
 }
 
 // VOXEL CLUSTER — flythrough a sparse field of architectural cubes
 float mapVoxels(vec3 p){
-  // Slow forward flight + drift
-  p.z += uTime * 0.25;
-  p.xz *= rot(uTime*0.04);
+  p.z += uTime * (0.25 + uLevel * 0.20);
+  p.xz *= rot(uTime*0.05 + uBass*0.10);
   p.xy *= rot(uTime*0.02);
 
-  // Bigger cells so cubes feel like substantial objects, not noise
   float CELL = 1.4;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q = mod(p + CELL*0.5, CELL) - CELL*0.5;
 
-  // Two hashes — existence and size
   float h1 = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
   float h2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
 
-  // Only ~50% of cells have a cube — gives lots of empty space to fly through
   float existence = smoothstep(0.50, 0.65, h1);
 
-  // Cube size varies — some big, some small
-  float vSize = (0.20 + h2 * 0.30 + uBass * 0.06) * existence;
+  // Cube size now visibly pumps with bass + beats
+  float vSize = (0.20 + h2 * 0.30 + uBass * 0.16 + uBeatDecay * 0.08) * existence;
   vSize = max(vSize, 0.001);
 
-  float voxel = sdBox(q, vec3(vSize));
-
-  return voxel;
+  return sdBox(q, vec3(vSize));
 }
 
 // CRYSTAL FIELD — scattered octahedral crystals in a flythrough
 float mapCrystals(vec3 p){
-  // Forward flight
-  p.z += uTime * 0.35;
-  p.xz *= rot(uTime*0.03);
+  p.z += uTime * (0.35 + uLevel * 0.25);
+  p.xz *= rot(uTime*0.04 + uBass*0.12);
 
-  // Tile xy plane (crystals on a 2D grid, varied height)
   float CELL = 1.0;
   vec2 cellId = floor((p.xy + CELL*0.5) / CELL);
   vec2 q = mod(p.xy + CELL*0.5, CELL) - CELL*0.5;
@@ -447,19 +431,15 @@ float mapCrystals(vec3 p){
   float h1 = fract(sin(dot(cellId, vec2(127.1, 311.7)))*43758.5453);
   float h2 = fract(sin(dot(cellId, vec2(91.7, 217.3)))*43758.5453);
 
-  // Crystal position offset within cell along z
   float zOffset = h2 * 4.0;
   float zPos = mod(p.z + zOffset, 4.0) - 2.0;
 
-  // Skip ~25% of cells — shrink size to zero smoothly (NOT mix, which breaks SDF)
   float existence = smoothstep(0.20, 0.40, h1);
-  float crysSize = (0.20 + h1 * 0.18 + uBass * 0.05) * existence;
+  // Crystals grow strongly with bass, pop on beats
+  float crysSize = (0.20 + h1 * 0.18 + uBass * 0.14 + uBeatDecay * 0.07) * existence;
   crysSize = max(crysSize, 0.001);
 
-  vec3 cp = vec3(q.x, q.y, zPos);
-  float crystal = sdOct(cp, crysSize);
-
-  return crystal;
+  return sdOct(vec3(q.x, q.y, zPos), crysSize);
 }
 
 // Unified scene SDF dispatcher — used by collision detection too
@@ -910,24 +890,63 @@ vec3 sceneGlyphs(vec2 uv){
   return col;
 }
 
+// Dispatches to the right scene. `uv` is centered/normalized; `zuv` is the
+// zoomed/rotated uv used for the 2D patterns.
+vec3 renderScene(vec2 uv, vec2 zuv, int sIdx){
+  if(sIdx == 0)      return raymarch3D(uv, 0); // lattice
+  else if(sIdx == 1) return raymarch3D(uv, 1); // cross temple
+  else if(sIdx == 2) return raymarch3D(uv, 2); // voxels
+  else if(sIdx == 3) return raymarch3D(uv, 3); // crystals
+  else if(sIdx == 4) return sceneGlitch(zuv);
+  else               return sceneGlyphs(zuv);
+}
+
 void main(){
   vec2 fragUV = gl_FragCoord.xy / uRes.xy;
   vec2 uv = (gl_FragCoord.xy - 0.5*uRes.xy) / min(uRes.x, uRes.y);
+  vec2 zuv = uv * uZoom * 1.4;
+  zuv *= rot(uRotY);
 
-  int sIdx = int(uScene + 0.5);
-  vec3 col;
-  // 3D raymarched scenes
-  if(sIdx == 0)      col = raymarch3D(uv, 0); // lattice
-  else if(sIdx == 1) col = raymarch3D(uv, 1); // cross temple
-  else if(sIdx == 2) col = raymarch3D(uv, 2); // voxels
-  else if(sIdx == 3) col = raymarch3D(uv, 3); // crystals
-  // 2D pattern scenes
-  else {
-    vec2 zuv = uv * uZoom * 1.4;
-    zuv *= rot(uRotY);
-    if(sIdx == 4) col = sceneGlitch(zuv);
-    else col = sceneGlyphs(zuv);
+  int sA = int(uSceneA + 0.5);
+  int sB = int(uSceneB + 0.5);
+
+  // Render A always. Render B only during a crossfade (uSceneMix > 0).
+  vec3 col = renderScene(uv, zuv, sA);
+  if(uSceneMix > 0.001){
+    vec3 colB = renderScene(uv, zuv, sB);
+    // Noise-dissolve mask adds organic texture to the crossfade — instead of
+    // a flat lerp, patches of B reveal through A following a low-freq noise field.
+    float dis = fbm(uv * 3.0 + uTime * 0.4);
+    float bias = uSceneMix * 1.35 - 0.15;
+    float dissolve = smoothstep(bias - 0.25, bias + 0.25, dis);
+    // Blend the noise mask with a pure lerp so it feels organic but still
+    // reaches 100% B at the end of the transition.
+    float mixAmt = mix(uSceneMix, dissolve, 0.6);
+    col = mix(col, colB, mixAmt);
   }
+
+  // ============= SHARED ATMOSPHERE LAYER =============
+  // Rendered above the scene so it persists across crossfades — ties the
+  // whole feed together visually regardless of which scene is active.
+
+  // 1) Radial bass bloom — warm center pulse that expands with bass
+  float atmDist = length(uv);
+  float atm = exp(-atmDist * 1.6) * (0.04 + uBass*0.28 + uBeatDecay*0.10);
+  col += pal(uTime*0.04 + 0.5) * atm;
+
+  // 2) Procedural dust sparkles — tied to treble; respond instantly to hi-hats
+  vec2 dustCoord = gl_FragCoord.xy * 0.028;
+  vec2 dustI = floor(dustCoord + vec2(uTime*5.0, uTime*3.5));
+  float dustH = fract(sin(dot(dustI, vec2(91.1, 43.7))) * 43758.5453);
+  vec2 dustF = fract(dustCoord + vec2(uTime*5.0, uTime*3.5)) - 0.5;
+  float sparkMask = step(0.972 - uTreb*0.04, dustH);
+  float sparkShape = smoothstep(0.32, 0.0, length(dustF));
+  col += pal(dustH + uTime*0.1) * sparkMask * sparkShape * (0.35 + uTreb*1.2 + uBeatDecay*0.4);
+
+  // 3) Horizontal scan pulse — subtle bar sweeps down on strong beats
+  float scanY = fract(uTime * 0.35);
+  float scan = exp(-pow((fragUV.y - scanY) * 12.0, 2.0)) * uBeatDecay * 0.25;
+  col += pal(uTime*0.06 + 0.2) * scan;
 
   vec2 fc = fragUV - 0.5;
   float zoom = 1.0 - 0.005 - uBass*0.010 - uBeatDecay*0.012;
@@ -1390,24 +1409,52 @@ const SCENES = [
 ];
 
 let currentScene = 0;
-let autoCycle = false;
 let autoT = 0;
 let autoSinceSwitch = 0;
 let autoEnergyAcc = 0;
 let hudHidden = false;
 let lastInteract = performance.now();
 
-// Uniformity tracking state for kaleidoscope rescue
-let uniformityCheckT = 0;
-let rawUniformity = 0;
-let smoothUniformity = 0;
+// ============= CROSSFADE TRANSITION STATE =============
+// When the auto-pilot picks a new scene, we don't swap instantly.
+// The shader renders both `currentScene` (A) and `transitionTo` (B)
+// and blends with uSceneMix over TRANSITION_DURATION seconds.
+let transitioning = false;
+let transitionT = 0;
+let transitionTo = 0;
+const TRANSITION_DURATION = 1.4;
 
-function setScene(i){
+function startTransition(toIdx){
+  toIdx = ((toIdx % SCENES.length) + SCENES.length) % SCENES.length;
+  if(toIdx === currentScene || transitioning) return;
+  transitionTo = toIdx;
+  transitionT = 0;
+  transitioning = true;
+  const s = SCENES[toIdx];
+  mainUniforms.uSceneB.value = toIdx;
+  // Palette swap happens at transition start — the crossfade covers it
+  mainUniforms.uPalette.value = s.palette;
+  mainUniforms.uHue.value = Math.random();
+  document.getElementById('scene-name').textContent = s.name;
+  document.getElementById('scene-num').textContent = String(toIdx+1).padStart(2,'0');
+}
+
+function finalizeTransition(){
+  currentScene = transitionTo;
+  mainUniforms.uSceneA.value = currentScene;
+  mainUniforms.uSceneMix.value = 0;
+  transitioning = false;
+  transitionT = 0;
+}
+
+// Set the starting scene immediately (no crossfade) — used for initial boot
+function setInitialScene(i){
   currentScene = ((i % SCENES.length) + SCENES.length) % SCENES.length;
   const s = SCENES[currentScene];
-  mainUniforms.uScene.value = currentScene;
+  mainUniforms.uSceneA.value = currentScene;
+  mainUniforms.uSceneB.value = currentScene;
+  mainUniforms.uSceneMix.value = 0;
   mainUniforms.uPalette.value = s.palette;
-  mainUniforms.uFeedback.value = s.fb;
   mainUniforms.uHue.value = Math.random();
   document.getElementById('scene-name').textContent = s.name;
   document.getElementById('scene-num').textContent = String(currentScene+1).padStart(2,'0');
@@ -1435,11 +1482,6 @@ function showStart(){
   // Reset the view
   setRotation(0, 0);
   setZoom(1.0);
-  // Turn off auto pilot if it was on
-  if(autoCycle){
-    autoCycle = false;
-    document.getElementById('auto').classList.remove('active');
-  }
   setMode('— idle —');
   // Show the start screen
   startEl.classList.remove('hidden');
@@ -1508,21 +1550,6 @@ function resumeIfPaused(){
   }
 }
 
-document.getElementById('prev').addEventListener('click', ()=>{ resumeIfPaused(); setScene(currentScene-1); bump(); });
-document.getElementById('next').addEventListener('click', ()=>{ resumeIfPaused(); setScene(currentScene+1); bump(); });
-document.getElementById('auto').addEventListener('click', e => {
-  autoCycle = !autoCycle;
-  e.currentTarget.classList.toggle('active', autoCycle);
-  toast(autoCycle ? 'auto pilot on — sit back' : 'auto pilot off');
-  // Resume playback if paused, and reset auto state
-  if(autoCycle){
-    resumeIfPaused();
-    autoT = 0;
-    autoSinceSwitch = 0;
-    autoEnergyAcc = visual.level;
-  }
-  bump();
-});
 document.getElementById('full').addEventListener('click', () => {
   if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
   else document.exitFullscreen?.();
@@ -1536,8 +1563,7 @@ document.getElementById('hide').addEventListener('click', () => {
 
 window.addEventListener('keydown', e => {
   bump();
-  if(e.key === ' '){ e.preventDefault(); setScene(currentScene+1); }
-  else if(e.key.toLowerCase() === 'f'){
+  if(e.key.toLowerCase() === 'f'){
     if(!document.fullscreenElement) document.documentElement.requestFullscreen?.();
     else document.exitFullscreen?.();
   }
@@ -1719,7 +1745,8 @@ function resize(){
   rtBloomD = makeRT(W()/4, H()/4);
 }
 
-setScene(0);
+// Pick a random starting scene for variety each time the page opens
+setInitialScene(Math.floor(Math.random() * SCENES.length));
 
 let lastT = performance.now();
 let fpsAcc = 0, fpsT = 0;
@@ -1796,43 +1823,60 @@ function tick(){
 
   const tmp = rtPrev; rtPrev = rtMain; rtMain = tmp;
 
-  // ============= AUTO MODE =============
-  // When enabled, smoothly drift zoom + rotation, and switch scenes synced to music.
-  if(autoCycle){
-    autoT += dt;
-    autoEnergyAcc = autoEnergyAcc * 0.98 + visual.level * 0.02;
+  // ============= ALWAYS-ON AUTO PILOT =============
+  // Smoothly drift zoom + rotation, and crossfade scenes synced to music.
+  autoT += dt;
+  autoEnergyAcc = autoEnergyAcc * 0.98 + visual.level * 0.02;
 
-    // Smooth wandering zoom — slow sine + bass response (kept in safe range)
-    const zoomTarget = 1.4 + Math.sin(autoT * 0.08) * 0.5 + (1 - visual.bass) * 0.2;
-    const targetZ = Math.max(0.7, Math.min(2.5, zoomTarget));
-    setZoomSmooth(targetZ, dt, 1.2);
+  // Drift speed scales with energy — higher energy = faster wander
+  const drift = 1.0 + visual.level * 1.4;
 
-    // Smooth wandering rotation — different frequencies for X and Y so it feels organic
-    const targetRotY = Math.sin(autoT * 0.10) * 1.2 + autoT * 0.05;
-    const targetRotX = Math.sin(autoT * 0.07 + 1.3) * 0.4;
-    setRotationSmooth(targetRotX, targetRotY, dt, 0.6);
+  // Wandering zoom — sine drift + bass pull + beat punch-in
+  const zoomSine = Math.sin(autoT * 0.08 * drift) * 0.5;
+  const bassPull = (1 - visual.bass) * 0.25;
+  const beatPunch = beatEnv * 0.25; // brief zoom-in on beats
+  const zoomTarget = 1.35 + zoomSine + bassPull - beatPunch;
+  const targetZ = Math.max(0.6, Math.min(2.6, zoomTarget));
+  setZoomSmooth(targetZ, dt, 1.6 + visual.level * 1.5);
 
-    // Scene switching: switch on a strong beat after at least 14 seconds,
-    // OR force-switch after 28 seconds even without a beat
-    autoSinceSwitch += dt;
-    const timeOK = autoSinceSwitch > 14;
-    const strongBeat = beatEnv > 0.85 && autoSinceSwitch > 8;
-    const energySpike = visual.level > autoEnergyAcc * 1.6 && autoSinceSwitch > 10;
-    const forceSwitch = autoSinceSwitch > 28;
+  // Wandering rotation — organic via different frequencies per axis
+  const targetRotY = Math.sin(autoT * 0.10 * drift) * 1.2 + autoT * (0.04 + visual.level * 0.10);
+  const targetRotX = Math.sin(autoT * 0.07 * drift + 1.3) * 0.45;
+  setRotationSmooth(targetRotX, targetRotY, dt, 0.6 + visual.level * 0.6);
 
-    if((timeOK && (strongBeat || energySpike)) || forceSwitch){
-      // Pick a different scene at random
+  // Dynamic feedback — longer trails when music is pumping, tighter when quiet
+  const base = SCENES[currentScene].fb;
+  const feedbackTarget = Math.min(0.94, base + visual.level * 0.10 + beatEnv * 0.04);
+  const curFb = mainUniforms.uFeedback.value;
+  mainUniforms.uFeedback.value = curFb + (feedbackTarget - curFb) * (1 - Math.exp(-dt * 4));
+
+  // Scene switching — only trigger if not already transitioning
+  autoSinceSwitch += dt;
+  if(!transitioning){
+    const timeOK       = autoSinceSwitch > 14;
+    const strongBeat   = beatEnv > 0.85  && autoSinceSwitch > 8;
+    const veryStrong   = beatEnv > 0.92  && autoSinceSwitch > 6;
+    const energySpike  = visual.level > autoEnergyAcc * 1.6 && autoSinceSwitch > 10;
+    const forceSwitch  = autoSinceSwitch > 28;
+
+    if(veryStrong || (timeOK && (strongBeat || energySpike)) || forceSwitch){
       let next = currentScene;
       while(next === currentScene && SCENES.length > 1){
         next = Math.floor(Math.random() * SCENES.length);
       }
-      setScene(next);
+      startTransition(next);
       autoSinceSwitch = 0;
     }
-  } else {
-    autoT = 0;
-    autoSinceSwitch = 0;
-    autoEnergyAcc = 0;
+  }
+
+  // Advance active transition — uSceneMix ramps 0→1 with smooth easing
+  if(transitioning){
+    transitionT += dt;
+    const raw = Math.min(1, transitionT / TRANSITION_DURATION);
+    // Ease-in-out cubic for a gentle blend curve
+    const eased = raw < 0.5 ? 4*raw*raw*raw : 1 - Math.pow(-2*raw + 2, 3) / 2;
+    mainUniforms.uSceneMix.value = eased;
+    if(raw >= 1) finalizeTransition();
   }
 
   if(now - lastInteract > 4000 && analyser && !hudHidden){
