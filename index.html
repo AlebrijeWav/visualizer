@@ -1229,12 +1229,52 @@ function startFile(file){
   // Clean up any prior playback
   stopAllPlayback();
 
-  pendingFile = file;
   setMode((file.name || 'audio').slice(0, 22));
   hideStart();
-  showPlayOverlay();
   isPaused = false;
   updatePlayPauseIcon();
+
+  // Fast path: play via <audio> element. Streams the file, handles any format
+  // the browser natively supports, and works inside a file-picker user gesture
+  // on iOS. Much more reliable than decodeAudioData for long/large files.
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    // Resume inside the gesture — required by iOS
+    if(audioCtx.state === 'suspended'){ audioCtx.resume().catch(()=>{}); }
+
+    const url = URL.createObjectURL(file);
+    mediaEl = new Audio();
+    mediaEl.src = url;
+    mediaEl.loop = true;
+    mediaEl.crossOrigin = 'anonymous';
+    // Hint to iOS that we intend to play this
+    mediaEl.preload = 'auto';
+    mediaEl.playsInline = true;
+
+    sourceNode = audioCtx.createMediaElementSource(mediaEl);
+    setupAnalyser(sourceNode);
+    // Route to output so the user can hear it
+    analyser.connect(audioCtx.destination);
+
+    toast('loading ' + (file.name || '').slice(0, 18));
+
+    const p = mediaEl.play();
+    if(p && p.then){
+      p.then(() => {
+        toast('playing · ' + (file.name || '').slice(0, 18));
+      }).catch(err => {
+        // iOS blocked it — fall back to explicit tap-to-play overlay
+        console.warn('direct play blocked, showing overlay', err);
+        pendingFile = file;
+        showPlayOverlay();
+      });
+    }
+  } catch(err){
+    console.error('startFile failed', err);
+    toast('audio setup failed — tap to play');
+    pendingFile = file;
+    showPlayOverlay();
+  }
 }
 
 function stopAllPlayback(){
