@@ -944,8 +944,10 @@ void main(){
   col += pal(dustH + uTime*0.1) * sparkMask * sparkShape * (0.35 + uTreb*1.2 + uBeatDecay*0.4);
 
   // 3) Horizontal scan pulse — subtle bar sweeps down on strong beats
+  // (use x*x instead of pow(x,2.0) — pow(negative, non-int) is NaN on some GPUs)
   float scanY = fract(uTime * 0.35);
-  float scan = exp(-pow((fragUV.y - scanY) * 12.0, 2.0)) * uBeatDecay * 0.25;
+  float scanDy = (fragUV.y - scanY) * 12.0;
+  float scan = exp(-scanDy * scanDy) * uBeatDecay * 0.25;
   col += pal(uTime*0.06 + 0.2) * scan;
 
   vec2 fc = fragUV - 0.5;
