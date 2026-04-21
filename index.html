@@ -402,6 +402,18 @@ float sdCross(vec3 p, float s){
 }
 float smin(float a,float b,float k){ float h=clamp(0.5+0.5*(b-a)/k,0.0,1.0); return mix(b,a,h)-k*h*(1.0-h); }
 
+// Low-frequency domain warp — bends the whole space with three cheap sines
+// so the cell grid curves through space instead of reading as a repeating
+// lattice. Amplitude × frequency stays < ~0.15 so Jacobian remains close to
+// identity (raymarch step factor 0.65 tolerates the small metric stretch).
+vec3 warpDomain(vec3 p, float amt){
+  return p + vec3(
+    sin(p.y*0.35 + p.z*0.28 + uTime*0.15),
+    sin(p.z*0.32 + p.x*0.30 + uTime*0.17),
+    sin(p.x*0.38 + p.y*0.26 + uTime*0.12)
+  ) * amt;
+}
+
 vec2 kaleido(vec2 p, float n){
   float a=atan(p.y,p.x), r=length(p), seg=TAU/n;
   a=mod(a,seg); a=abs(a-seg*0.5);
@@ -412,11 +424,14 @@ float mapLattice(vec3 p){
   p.z += uFwd * 1.0;
   p.xz *= rot(uTime*0.04 + uBass*0.35);
   p.xy *= rot(uTime*0.02 + uMid*0.22);
+  // Bend the whole space so the lattice curves — no more dead-straight grid
+  p = warpDomain(p, 0.35);
 
   float CELL = 1.4;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q1 = mod(p + CELL*0.5, CELL) - CELL*0.5;
   float cellH = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
+  float cellH2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
 
   // Per-cell spin — each octahedron tumbles at its own rate so the field
   // never reads as a static grid. Apply to a copy of q1 so the axis-aligned
@@ -426,8 +441,9 @@ float mapLattice(vec3 p){
   qRot.xy *= rot(spin);
   qRot.yz *= rot(spin * 0.7);
 
-  // Shape size pumps hard with bass; beats punch it further
-  float shapeSize = 0.20 + cellH * 0.14 + uBass * 0.36 + uBeatDecay * 0.16;
+  // Shape size — capped so growth can't overwhelm the cell. Max is ~0.52
+  // (vs CELL/2 = 0.70), leaving clearance for the camera on strong beats.
+  float shapeSize = 0.18 + cellH * 0.12 + uBass * 0.16 + uBeatDecay * 0.08;
 
   // SHAPE MORPH — each cell slowly crossfades octahedron ↔ rounded cube,
   // phase-offset by hash so neighbors morph out of sync. Mid-band of the
@@ -458,6 +474,8 @@ float mapPlasma(vec3 p){
 
   p.xz *= rot(uTime*0.04 + uBass*0.30);
   p.xy *= rot(uTime*0.02 + uMid*0.25);
+  // Warp — bends the cross forest so it doesn't read as a rigid grid
+  p = warpDomain(p, 0.30);
 
   // Two scales of crosses, well-spaced
   vec3 q1 = mod(p + 1.0, 2.0) - 1.0;
@@ -471,9 +489,10 @@ float mapPlasma(vec3 p){
   q2.xy *= rot(-spin*0.9);
   q2.xz *= rot(spin*0.5);
 
-  // Big cross size pumps strongly with bass; beats slam it wider
-  float c1 = sdCross(q1, 0.22 + 0.32*uBass + 0.20*uBeatDecay);
-  float c2 = sdCross(q2, 0.08 + 0.12*uMid  + 0.08*uBeatDecay);
+  // Sizes capped — max big cross ~0.56 (vs half-cell 1.0), small ~0.19
+  // (vs half-cell 0.35). Keeps plenty of clearance even on hard beats.
+  float c1 = sdCross(q1, 0.20 + 0.18*uBass + 0.10*uBeatDecay);
+  float c2 = sdCross(q2, 0.07 + 0.07*uMid  + 0.05*uBeatDecay);
 
   // Smooth union radius grows on beats so the two scales fuse into a blob
   float d = smin(c1, c2, 0.04 + uBeatDecay*0.06);
@@ -485,6 +504,8 @@ float mapVoxels(vec3 p){
   p.z += uFwd * 1.25;
   p.xz *= rot(uTime*0.05 + uBass*0.22);
   p.xy *= rot(uTime*0.02);
+  // Warp bends the skyline so columns snake through space, not along z
+  p = warpDomain(p, 0.45);
 
   // Larger cells + higher existence threshold = more air between cubes
   float CELL = 1.7;
@@ -493,28 +514,38 @@ float mapVoxels(vec3 p){
 
   float h1 = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
   float h2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
+  float h3 = fract(sin(dot(cellId, vec3(53.7, 113.5, 179.3)))*43758.5453);
 
   // Higher threshold -> fewer filled cells (~28% vs ~42%)
   float existence = smoothstep(0.64, 0.78, h1);
 
-  // Base size — pumps hard on bass, slams on beats
-  float vSize = (0.20 + h2 * 0.28 + uBass * 0.28 + uBeatDecay * 0.20) * existence;
+  // Per-cell xy offset — breaks the column-centered alignment so voxels
+  // don't read as a rigid axis-aligned lattice when moving
+  vec3 off = vec3((h2 - 0.5) * 0.5, (h3 - 0.5) * 0.4, (h1 - 0.5) * 0.5);
+
+  // Base size — pumps with bass, slams on beats. Capped lower so the
+  // worst case (size * stretchY) stays under half-cell to keep the
+  // flight path clear.
+  float vSize = (0.15 + h2 * 0.16 + uBass * 0.14 + uBeatDecay * 0.10) * existence;
   vSize = max(vSize, 0.001);
 
-  // Per-axis stretch that drifts over time + punches on beat. The "skyline"
-  // reshapes continuously — towers stretch tall on kick, flatten on rest.
-  float stretchY = 1.0 + uBeatDecay*1.3 + uBass*0.6
-                     + 0.25*sin(uTime*0.35 + h1*TAU);
-  float stretchX = 1.0 + 0.20*sin(uTime*0.25 + h2*TAU);
-  float stretchZ = 1.0 + 0.18*sin(uTime*0.30 + h1*TAU + 1.3);
+  // Per-axis stretch — bounded so max y-extent ≈ vSize * 1.7 stays inside
+  // the cell even on peak beats. Towers still stretch tall but won't
+  // grow large enough to box the camera in.
+  float stretchY = 1.0 + uBeatDecay*0.55 + uBass*0.30
+                     + 0.18*sin(uTime*0.35 + h1*TAU);
+  float stretchX = 1.0 + 0.15*sin(uTime*0.25 + h2*TAU);
+  float stretchZ = 1.0 + 0.14*sin(uTime*0.30 + h1*TAU + 1.3);
 
-  return sdBox(q, vec3(vSize*stretchX, vSize*stretchY, vSize*stretchZ));
+  return sdBox(q - off, vec3(vSize*stretchX, vSize*stretchY, vSize*stretchZ));
 }
 
 // CRYSTAL FIELD — scattered octahedral crystals in a flythrough
 float mapCrystals(vec3 p){
   p.z += uFwd * 1.75;
   p.xz *= rot(uTime*0.04 + uBass*0.25);
+  // Warp so the z-columns of crystals curve through space
+  p = warpDomain(p, 0.40);
 
   float CELL = 1.0;
   vec2 cellId = floor((p.xy + CELL*0.5) / CELL);
@@ -522,26 +553,32 @@ float mapCrystals(vec3 p){
 
   float h1 = fract(sin(dot(cellId, vec2(127.1, 311.7)))*43758.5453);
   float h2 = fract(sin(dot(cellId, vec2(91.7, 217.3)))*43758.5453);
+  float h3 = fract(sin(dot(cellId, vec2(53.7, 113.5)))*43758.5453);
 
   float zOffset = h2 * 4.0;
   float zPos = mod(p.z + zOffset, 4.0) - 2.0;
 
   float existence = smoothstep(0.20, 0.40, h1);
-  // Crystals balloon hard with bass, pop big on beats
-  float crysSize = (0.18 + h1 * 0.18 + uBass * 0.32 + uBeatDecay * 0.22) * existence;
+  // Max crysSize capped at ~0.47 (vs half-cell 0.5) so crystals don't
+  // poke into the neighbour cell on heavy bass.
+  float crysSize = (0.14 + h1 * 0.12 + uBass * 0.14 + uBeatDecay * 0.10) * existence;
   crysSize = max(crysSize, 0.001);
+
+  // Per-cell xy offset breaks the centered-on-grid feel
+  vec2 off = vec2((h2 - 0.5) * 0.35, (h3 - 0.5) * 0.35);
 
   // Each crystal spins at its own rate (h1 seeds the tempo) so the field
   // shimmers like real gems catching light.
-  vec3 cq = vec3(q.x, q.y, zPos);
+  vec3 cq = vec3(q.x - off.x, q.y - off.y, zPos);
   float spin = uTime * (0.45 + h1*0.55) + h1 * TAU;
   cq.xy *= rot(spin);
   cq.xz *= rot(spin * 0.55);
 
   // Axial squash on bass — crystals elongate vertically when the low end
-  // hits, then settle back. Dividing by (1+uBass*0.5) SHRINKS the y coord,
-  // which keeps the SDF conservative (Lipschitz-safe) for raymarching.
-  cq.y *= 1.0 / (1.0 + uBass * 0.55);
+  // hits. Dividing by (1+uBass*K) SHRINKS the y coord, which keeps the
+  // SDF conservative (Lipschitz-safe) for raymarching. K reduced so
+  // elongation fits inside the cell.
+  cq.y *= 1.0 / (1.0 + uBass * 0.35);
 
   return sdOct(cq, crysSize);
 }
@@ -553,6 +590,8 @@ float mapBubbles(vec3 p){
   p.x += sin(uTime*0.18) * 0.30;
   p.y += cos(uTime*0.14) * 0.24;
   p.xz *= rot(uTime*0.03 + uBass*0.18);
+  // Warp bends the nebula so bubbles don't sit on a rigid axis-aligned grid
+  p = warpDomain(p, 0.38);
 
   // Larger cells + higher threshold = much sparser nebula
   float CELL = 1.55;
@@ -573,7 +612,7 @@ float mapBubbles(vec3 p){
   float existence = smoothstep(0.52, 0.74, h1);
   // Stronger per-cell breathing — bubbles visibly inhale/exhale
   float breath = 0.10 * sin(uTime*1.6 + h1*18.0);
-  float radius = (0.22 + h2*0.18 + uBass*0.38 + uBeatDecay*0.22 + breath) * existence;
+  float radius = (0.20 + h2*0.14 + uBass*0.20 + uBeatDecay*0.12 + breath) * existence;
   radius = max(radius, 0.001);
 
   float d1 = sdSphere(q - off, radius);
@@ -612,6 +651,11 @@ float mapTunnel(vec3 p){
   // Twist — strong beat kick spins the walls past you faster
   float tw = p.z * 0.18 + uTime*0.25 + uBeatDecay*0.40;
   p.xy *= rot(tw);
+  // Subtle warp — perturbs panels/rings so the tunnel surface doesn't
+  // read as perfectly periodic. Smaller amplitude than other scenes
+  // because we're *inside* this shape and can't afford metric stretch
+  // near the walls.
+  p = warpDomain(p, 0.18);
 
   float r = length(p.xy);
   float a = atan(p.y, p.x);
@@ -718,9 +762,11 @@ vec3 raymarch3D(vec2 uv, int sIdx){
 
   // ===== CAMERA COLLISION =====
   // Push the camera back along its outward direction until it has clearance.
-  float CLEARANCE = 0.35;
+  // Widened so beat-pumped geometry can't crowd the lens — the camera
+  // retreats rather than getting boxed in by an oversized voxel/bubble.
+  float CLEARANCE = 0.55;
   vec3 outward = normalize(ro);
-  for(int i = 0; i < 8; i++){
+  for(int i = 0; i < 12; i++){
     float d = sceneSDF(ro, sIdx);
     if(d >= CLEARANCE) break;
     ro += outward * (CLEARANCE - d + 0.01);
