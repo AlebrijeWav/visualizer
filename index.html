@@ -409,33 +409,45 @@ vec2 kaleido(vec2 p, float n){
 }
 
 float mapLattice(vec3 p){
-  // Smooth forward fly-through via JS-accumulated uFwd (no audio jerk).
-  // Shape warping still reacts to bass — "music moves the shapes".
   p.z += uFwd * 1.0;
-  p.xz *= rot(uTime*0.04 + uBass*0.20);
-  p.xy *= rot(uTime*0.02);
+  p.xz *= rot(uTime*0.04 + uBass*0.35);
+  p.xy *= rot(uTime*0.02 + uMid*0.22);
 
   float CELL = 1.4;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q1 = mod(p + CELL*0.5, CELL) - CELL*0.5;
   float cellH = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
 
-  // Shape size pumps strongly with bass; beats punch it further
-  float shapeSize = 0.20 + cellH * 0.14 + uBass * 0.24 + uBeatDecay * 0.08;
-  float oct = sdOct(q1, shapeSize);
+  // Per-cell spin — each octahedron tumbles at its own rate so the field
+  // never reads as a static grid. Apply to a copy of q1 so the axis-aligned
+  // struts below stay stable.
+  vec3 qRot = q1;
+  float spin = uTime * 0.40 + cellH * TAU + uBeatDecay * 0.9;
+  qRot.xy *= rot(spin);
+  qRot.yz *= rot(spin * 0.7);
 
-  // Connecting struts — thin square cross-section bars along axes
-  // Use absolute coordinates within the cell
+  // Shape size pumps hard with bass; beats punch it further
+  float shapeSize = 0.20 + cellH * 0.14 + uBass * 0.36 + uBeatDecay * 0.16;
+
+  // SHAPE MORPH — each cell slowly crossfades octahedron ↔ rounded cube,
+  // phase-offset by hash so neighbors morph out of sync. Mid-band of the
+  // song biases the blend so the vibe shifts with the melody.
+  float morphT = uTime * 0.28 + uMid * 2.0 + cellH * 3.14;
+  float morph = 0.5 + 0.5 * sin(morphT);
+  float oct = sdOct(qRot, shapeSize);
+  float box = sdBox(qRot, vec3(shapeSize * 0.72));
+  float shape = mix(oct, box, morph);
+
+  // Connecting struts — thickness pulses with treble
   vec3 ap = abs(q1);
-  float STRUT = 0.035;
-  // Each strut is a "box bar" extending along one axis through cell center
+  float STRUT = 0.030 + uTreb * 0.030;
   float strutX = max(ap.y, ap.z) - STRUT;
   float strutY = max(ap.x, ap.z) - STRUT;
   float strutZ = max(ap.x, ap.y) - STRUT;
   float struts = min(min(strutX, strutY), strutZ);
 
-  // Smooth union of shape + struts
-  float d = smin(oct, struts, 0.06);
+  // Smooth union — blend radius grows on beats to goo shapes together
+  float d = smin(shape, struts, 0.06 + uBeatDecay * 0.06);
   return d;
 }
 
@@ -444,24 +456,34 @@ float mapPlasma(vec3 p){
   p.x += sin(uTime*0.15) * 0.4;
   p.y += cos(uTime*0.12) * 0.3;
 
-  p.xz *= rot(uTime*0.04 + uBass*0.15);
-  p.xy *= rot(uTime*0.02 + uMid*0.08);
+  p.xz *= rot(uTime*0.04 + uBass*0.30);
+  p.xy *= rot(uTime*0.02 + uMid*0.25);
 
   // Two scales of crosses, well-spaced
   vec3 q1 = mod(p + 1.0, 2.0) - 1.0;
   vec3 q2 = mod(p + 0.35, 0.7) - 0.35;
 
-  float c1 = sdCross(q1, 0.22 + 0.18*uBass + 0.08*uBeatDecay);
-  float c2 = sdCross(q2, 0.08 + 0.06*uMid  + 0.03*uBeatDecay);
+  // Gyrate the crosses themselves — big scale spins slow, small spins fast
+  // in the opposite direction so the two lattices weave.
+  float spin = uTime*0.35 + uBeatDecay*0.8;
+  q1.xy *= rot(spin);
+  q1.yz *= rot(spin*0.6);
+  q2.xy *= rot(-spin*0.9);
+  q2.xz *= rot(spin*0.5);
 
-  float d = smin(c1, c2, 0.04);
+  // Big cross size pumps strongly with bass; beats slam it wider
+  float c1 = sdCross(q1, 0.22 + 0.32*uBass + 0.20*uBeatDecay);
+  float c2 = sdCross(q2, 0.08 + 0.12*uMid  + 0.08*uBeatDecay);
+
+  // Smooth union radius grows on beats so the two scales fuse into a blob
+  float d = smin(c1, c2, 0.04 + uBeatDecay*0.06);
   return d;
 }
 
 // VOXEL CLUSTER — flythrough a sparse field of architectural cubes
 float mapVoxels(vec3 p){
   p.z += uFwd * 1.25;
-  p.xz *= rot(uTime*0.05 + uBass*0.10);
+  p.xz *= rot(uTime*0.05 + uBass*0.22);
   p.xy *= rot(uTime*0.02);
 
   // Larger cells + higher existence threshold = more air between cubes
@@ -475,17 +497,24 @@ float mapVoxels(vec3 p){
   // Higher threshold -> fewer filled cells (~28% vs ~42%)
   float existence = smoothstep(0.64, 0.78, h1);
 
-  // Cube size now visibly pumps with bass + beats
-  float vSize = (0.20 + h2 * 0.28 + uBass * 0.16 + uBeatDecay * 0.08) * existence;
+  // Base size — pumps hard on bass, slams on beats
+  float vSize = (0.20 + h2 * 0.28 + uBass * 0.28 + uBeatDecay * 0.20) * existence;
   vSize = max(vSize, 0.001);
 
-  return sdBox(q, vec3(vSize));
+  // Per-axis stretch that drifts over time + punches on beat. The "skyline"
+  // reshapes continuously — towers stretch tall on kick, flatten on rest.
+  float stretchY = 1.0 + uBeatDecay*1.3 + uBass*0.6
+                     + 0.25*sin(uTime*0.35 + h1*TAU);
+  float stretchX = 1.0 + 0.20*sin(uTime*0.25 + h2*TAU);
+  float stretchZ = 1.0 + 0.18*sin(uTime*0.30 + h1*TAU + 1.3);
+
+  return sdBox(q, vec3(vSize*stretchX, vSize*stretchY, vSize*stretchZ));
 }
 
 // CRYSTAL FIELD — scattered octahedral crystals in a flythrough
 float mapCrystals(vec3 p){
   p.z += uFwd * 1.75;
-  p.xz *= rot(uTime*0.04 + uBass*0.12);
+  p.xz *= rot(uTime*0.04 + uBass*0.25);
 
   float CELL = 1.0;
   vec2 cellId = floor((p.xy + CELL*0.5) / CELL);
@@ -498,11 +527,23 @@ float mapCrystals(vec3 p){
   float zPos = mod(p.z + zOffset, 4.0) - 2.0;
 
   float existence = smoothstep(0.20, 0.40, h1);
-  // Crystals grow strongly with bass, pop on beats
-  float crysSize = (0.20 + h1 * 0.18 + uBass * 0.14 + uBeatDecay * 0.07) * existence;
+  // Crystals balloon hard with bass, pop big on beats
+  float crysSize = (0.18 + h1 * 0.18 + uBass * 0.32 + uBeatDecay * 0.22) * existence;
   crysSize = max(crysSize, 0.001);
 
-  return sdOct(vec3(q.x, q.y, zPos), crysSize);
+  // Each crystal spins at its own rate (h1 seeds the tempo) so the field
+  // shimmers like real gems catching light.
+  vec3 cq = vec3(q.x, q.y, zPos);
+  float spin = uTime * (0.45 + h1*0.55) + h1 * TAU;
+  cq.xy *= rot(spin);
+  cq.xz *= rot(spin * 0.55);
+
+  // Axial squash on bass — crystals elongate vertically when the low end
+  // hits, then settle back. Dividing by (1+uBass*0.5) SHRINKS the y coord,
+  // which keeps the SDF conservative (Lipschitz-safe) for raymarching.
+  cq.y *= 1.0 / (1.0 + uBass * 0.55);
+
+  return sdOct(cq, crysSize);
 }
 
 // BUBBLE NEBULA — organic metaball spheres that merge softly, breathing with bass
@@ -511,7 +552,7 @@ float mapBubbles(vec3 p){
   // Gentle drift to feel like floating through a cloud
   p.x += sin(uTime*0.18) * 0.30;
   p.y += cos(uTime*0.14) * 0.24;
-  p.xz *= rot(uTime*0.03 + uBass*0.08);
+  p.xz *= rot(uTime*0.03 + uBass*0.18);
 
   // Larger cells + higher threshold = much sparser nebula
   float CELL = 1.55;
@@ -522,14 +563,17 @@ float mapBubbles(vec3 p){
   float h2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
   float h3 = fract(sin(dot(cellId, vec3(53.7, 113.5, 179.3)))*43758.5453);
 
-  // Off-center sphere per cell = organic, not grid-aligned
+  // Off-center sphere per cell — also DRIFTS with time so bubbles swim
   vec3 off = (vec3(h1, h2, h3) - 0.5) * 0.40;
+  off.x += 0.12 * sin(uTime*0.7 + h1*TAU);
+  off.y += 0.12 * cos(uTime*0.6 + h2*TAU);
+  off.z += 0.10 * sin(uTime*0.5 + h3*TAU);
 
   // Higher threshold -> far fewer bubbles (~32% fill vs ~60%)
   float existence = smoothstep(0.52, 0.74, h1);
-  // Slow per-cell breathing + bass pulse
-  float breath = 0.04 * sin(uTime*1.6 + h1*18.0);
-  float radius = (0.28 + h2*0.16 + uBass*0.20 + uBeatDecay*0.09 + breath) * existence;
+  // Stronger per-cell breathing — bubbles visibly inhale/exhale
+  float breath = 0.10 * sin(uTime*1.6 + h1*18.0);
+  float radius = (0.22 + h2*0.18 + uBass*0.38 + uBeatDecay*0.22 + breath) * existence;
   radius = max(radius, 0.001);
 
   float d1 = sdSphere(q - off, radius);
@@ -541,49 +585,62 @@ float mapBubbles(vec3 p){
   float h2b = fract(sin(dot(cellId2, vec3(91.7, 217.3, 51.1)))*43758.5453);
   float h3b = fract(sin(dot(cellId2, vec3(53.7, 113.5, 179.3)))*43758.5453);
   vec3 off2 = (vec3(h1b, h2b, h3b) - 0.5) * 0.40;
+  off2.x += 0.12 * sin(uTime*0.7 + h1b*TAU);
+  off2.y += 0.12 * cos(uTime*0.6 + h2b*TAU);
+  off2.z += 0.10 * sin(uTime*0.5 + h3b*TAU);
   float eb = smoothstep(0.52, 0.74, h1b);
-  float radiusB = (0.28 + h2b*0.16 + uBass*0.20 + uBeatDecay*0.09) * eb;
+  float breathB = 0.10 * sin(uTime*1.6 + h1b*18.0);
+  float radiusB = (0.22 + h2b*0.18 + uBass*0.38 + uBeatDecay*0.22 + breathB) * eb;
   radiusB = max(radiusB, 0.001);
   float d2 = sdSphere(q2 - off2, radiusB);
 
-  return smin(d1, d2, 0.40);
+  // Metaball blend radius grows on beats — bubbles fuse into amoeba-like
+  // goo on kicks, then separate on the decay.
+  return smin(d1, d2, 0.40 + uBeatDecay*0.25);
 }
 
-// HYPER TUNNEL — paneled 6-petal corridor with bands, studs, and a snaking path
+// HYPER TUNNEL — paneled petal corridor with morphing petal count, panels,
+// rings, studs, and a bass-driven constriction pulse.
 float mapTunnel(vec3 p){
   p.z += uFwd * 1.35;
 
-  // Lateral serpentine — the tunnel itself bends as you fly
-  p.x += sin(p.z * 0.18 + uTime*0.20) * 0.28;
-  p.y += cos(p.z * 0.15 + uTime*0.18) * 0.22;
+  // Lateral serpentine — bass widens the swing so the tunnel snakes harder
+  // during loud sections.
+  p.x += sin(p.z * 0.18 + uTime*0.20) * (0.28 + uBass*0.22);
+  p.y += cos(p.z * 0.15 + uTime*0.18) * (0.22 + uBass*0.18);
 
-  // Stronger twist that also kicks on beats, so the walls swirl past you
-  float tw = p.z * 0.18 + uTime*0.22 + uBeatDecay*0.22;
+  // Twist — strong beat kick spins the walls past you faster
+  float tw = p.z * 0.18 + uTime*0.25 + uBeatDecay*0.40;
   p.xy *= rot(tw);
 
   float r = length(p.xy);
   float a = atan(p.y, p.x);
 
-  // 6-petal base radius with bass/beat pulse
-  float petalR = 1.62 + 0.22*sin(a*6.0 + uTime*0.40)
-                      + uBass*0.14 + uBeatDecay*0.09;
+  // MORPHING PETAL COUNT — fractional petals between 5 and 7 create rolling
+  // waves as the sin(a*pN) phase shifts continuously; uMid biases the count
+  // so the tunnel breathes with the melody.
+  float pN = 6.0 + 1.4*sin(uTime*0.14 + uMid*1.0);
+  float petalR = 1.62 + 0.26*sin(a*pN + uTime*0.45)
+                      + uBass*0.22 + uBeatDecay*0.18;
 
-  // PANEL CHECKERBOARD — 8 angular × z-periodic bumps carve a tiled look
-  // onto the interior surface so the walls read as architectural paneling
+  // Panel checkerboard — treble sharpens the tiled relief
   float panelA = sin(a * 8.0);
   float panelZ = sin(p.z * 2.4 + uTime*0.3);
-  petalR += panelA * panelZ * 0.05;
+  petalR += panelA * panelZ * (0.05 + uTreb*0.04);
 
-  // ARCHITECTURAL RINGS — inward bulges every ~1.2z; you fly THROUGH them
+  // Architectural rings
   float ringPhase = fract(p.z * 0.85 + 0.5);
   float ringMask = 1.0 - smoothstep(0.0, 0.18, abs(ringPhase - 0.5));
   petalR -= ringMask * 0.09;
 
-  // STUD ACCENTS — small bumps where rings cross panel peaks, beat-reactive
+  // Studs — beat-reactive bumps at the ring/panel crossings
   float studA = smoothstep(0.86, 1.0, abs(sin(a * 18.0)));
-  petalR -= ringMask * studA * (0.03 + uBeatDecay*0.02);
+  petalR -= ringMask * studA * (0.03 + uBeatDecay*0.04);
 
-  // Single wall shell around the fully modulated radius
+  // BASS CONSTRICTION — whole tunnel pinches tighter on low-end hits so
+  // the walls feel like they're breathing against you.
+  petalR -= uBass * 0.10 + uBeatDecay * 0.08;
+
   return abs(r - petalR) - 0.08;
 }
 
@@ -1100,8 +1157,10 @@ vec3 sceneGlyphs(vec2 uv){
 // chromatic fringing, the whole field drifts and pulses with bass.
 // ============================================================
 vec3 sceneIris(vec2 uv){
-  // Slow diagonal chromatic gradient backdrop (teal → purple → amber)
-  float gAng = uv.x * 0.9 + uv.y * 0.6 + uTime * 0.05;
+  // Slow diagonal chromatic gradient backdrop (teal → purple → amber).
+  // The gradient itself drifts with mid-band so the hue sheet moves with
+  // the melody, not just the grid.
+  float gAng = uv.x * 0.9 + uv.y * 0.6 + uTime * 0.05 + uMid*0.6;
   float gradT = 0.5 + 0.5 * sin(gAng * 1.3 + sin(uv.y*2.2 + uTime*0.12)*0.35);
   vec3 teal   = vec3(0.38, 0.90, 0.92);
   vec3 purple = vec3(0.40, 0.28, 0.68);
@@ -1110,8 +1169,8 @@ vec3 sceneIris(vec2 uv){
     ? mix(teal, purple, smoothstep(0.0, 0.5, gradT))
     : mix(purple, amber, smoothstep(0.5, 1.0, gradT));
 
-  // Dense lens grid — stagger every other row for a subtle honeycomb feel
-  vec2 p = uv * (6.2 + uBass*0.55);
+  // Dense lens grid — density pumps with bass (more lenses during drops)
+  vec2 p = uv * (6.2 + uBass*1.1);
   p += vec2(uTime*0.16, uTime*0.10);
   float row = floor(p.y);
   float rowShift = mod(row, 2.0) * 0.5;
@@ -1122,108 +1181,42 @@ vec3 sceneIris(vec2 uv){
   float h2 = hash(cellId + 7.1);
 
   float r = length(q);
-  // Concentric rings — treble drives ring dance, bass widens breathing
-  float ringFreq = 22.0 + h*10.0;
-  float ringPhase = -uTime*1.6 - h*TAU + uBeatDecay*5.0;
+  // Concentric rings — bass WIDENS the ring spacing (slow pulse),
+  // treble speeds the phase sweep (fast shimmer), beats ripple outward.
+  float ringFreq = 22.0 + h*10.0 - uBass*10.0;
+  float ringPhase = -uTime*(1.6 + uTreb*2.5) - h*TAU + uBeatDecay*6.0;
   float rings = 0.5 + 0.5 * sin(r * ringFreq + ringPhase);
 
-  // Lens disk / groove masks
-  float disk   = smoothstep(0.48, 0.44, r);
-  float groove = smoothstep(0.50, 0.48, r); // 1 inside lens, 0 in corners
+  // Lens disk — radius itself pulses on beats so lenses visibly swell
+  float lensR = 0.48 + uBeatDecay*0.06;
+  float disk   = smoothstep(lensR, lensR - 0.04, r);
+  float groove = smoothstep(lensR + 0.02, lensR, r);
 
-  // Chromatic fringe: sample ring value with per-channel offset
-  float caOff = 0.006 + uBeatDecay*0.012;
+  // Chromatic fringe widens on beats
+  float caOff = 0.006 + uBeatDecay*0.020 + uBass*0.008;
   float rR = length(q - vec2(caOff, 0.0));
   float rB = length(q + vec2(caOff, 0.0));
   float ringR = 0.5 + 0.5 * sin(rR * ringFreq + ringPhase);
   float ringB = 0.5 + 0.5 * sin(rB * ringFreq + ringPhase);
   vec3 iri = vec3(ringR, rings, ringB);
 
-  // Embossed highlight — bright spot toward upper-left of each lens
-  vec2 L = normalize(vec2(-0.55, 0.78));
+  // Embossed highlight — light direction sweeps with time so the emboss
+  // shifts around each lens rather than sitting statically.
+  float lAng = uTime*0.25 + uMid*1.5;
+  vec2 L = vec2(cos(lAng), sin(lAng));
   float spec = pow(max(0.0, dot(normalize(q + vec2(1e-4)), L)), 3.2);
   spec *= disk;
 
-  // Compose
   vec3 col = bg * 0.80;
-  // Lens body: tint the bg with the iridescent ring field
   col = mix(col, col * (0.45 + iri * 1.25), disk * 0.92);
-  col += vec3(1.0) * spec * (0.45 + uMid*0.35);
-  // Darken grooves between lenses for extra definition
+  col += vec3(1.0) * spec * (0.45 + uMid*0.45);
   col *= mix(0.55, 1.0, groove);
 
-  // Random sparkle on some lens centers — twinkles on hi-hats
-  float sparkle = step(0.92, h2) * smoothstep(0.08, 0.0, r);
-  col += vec3(1.05, 1.0, 0.95) * sparkle * (0.35 + uTreb*0.8);
+  // Per-lens sparkle — more twinkles on hi-hats, bass lets more through
+  float sparkle = step(0.92 - uBass*0.1, h2) * smoothstep(0.08, 0.0, r);
+  col += vec3(1.05, 1.0, 0.95) * sparkle * (0.35 + uTreb*1.0 + uBeatDecay*0.5);
 
-  // Subtle vignette
   col *= 1.0 - dot(uv, uv) * 0.22;
-  return col;
-}
-
-// ============================================================
-// SCENE: MANDALA — 6-fold kaleidoscopic wireframe geometry over a
-// starfield. Symmetric spokes, nested polygons, crossing laser rays,
-// pulsing central bloom. Inspired by the wireframe mandala reference.
-// ============================================================
-vec3 sceneMandala(vec2 uv){
-  // Starfield stays in screen space so stars twinkle independently of the fold
-  vec2 starP = uv * 220.0;
-  vec2 starI = floor(starP);
-  vec2 starF = fract(starP) - 0.5;
-  float sh   = fract(sin(dot(starI, vec2(91.1, 43.7)))*43758.5453);
-  float twinkle = 0.5 + 0.5*sin(uTime*3.4 + sh*TAU);
-  vec3 col = vec3(0.0);
-  col += vec3(0.85, 0.90, 1.00) * step(0.992, sh) * smoothstep(0.18, 0.0, length(starF)) * twinkle;
-
-  // Fold space to get mirrored mandala symmetry
-  vec2 p = uv * 2.2;
-  p *= rot(uTime * 0.04);
-  p = kaleido(p, 6.0);
-
-  float r  = length(p);
-  float a  = atan(p.y, p.x);
-
-  // Narrow radial spokes emanating from center
-  float spokeFreq = 9.0;
-  float spokes = pow(abs(sin(a * spokeFreq + uTime*0.2)), 40.0);
-  spokes *= smoothstep(1.9, 0.0, r);
-  col += pal(uTime*0.06 + 0.12) * spokes * (0.35 + uMid*0.7);
-
-  // Nested n-gon wireframe at center — beat-reactive scale
-  float nGon = 5.0;
-  float seg = TAU / nGon;
-  float aMod = mod(a, seg) - seg*0.5;
-  float polyR = (0.42 + uBass*0.18 + uBeatDecay*0.10) / cos(aMod);
-  float polyLine = smoothstep(0.014, 0.0, abs(r - polyR));
-  col += pal(0.58) * polyLine * 1.1;
-
-  // Outer 8-gon ring, slowly counter-rotating
-  float nG2 = 8.0;
-  float seg2 = TAU / nG2;
-  float aMod2 = mod(a + uTime*0.12, seg2) - seg2*0.5;
-  float polyR2 = (0.95 + 0.06*sin(uTime*0.4)) / cos(aMod2);
-  float polyLine2 = smoothstep(0.012, 0.0, abs(r - polyR2));
-  col += pal(0.22) * polyLine2 * 0.75;
-
-  // Crossed diagonal laser rays, fade with distance
-  float diag = max(smoothstep(0.008, 0.0, abs(p.x - p.y)),
-                   smoothstep(0.008, 0.0, abs(p.x + p.y)));
-  diag *= smoothstep(2.2, 0.0, r);
-  col += pal(0.9) * diag * 0.30 * (0.5 + uTreb*1.0);
-
-  // Small floating "drone" marks along the spokes
-  float droneR = fract(r * 2.5 - uTime*0.3);
-  float droneA = sin(a * 6.0);
-  float drone = smoothstep(0.04, 0.02, length(vec2(droneR - 0.5, droneA * 0.15)));
-  drone *= smoothstep(2.0, 0.2, r);
-  col += pal(0.05) * drone * (0.4 + uBeatDecay*0.6);
-
-  // Central bloom — warm core that pulses with bass
-  col += pal(0.08) * exp(-r*3.0) * (0.18 + uBass*0.55 + uBeatDecay*0.25);
-
-  // Subtle vignette
-  col *= 1.0 - dot(uv, uv) * 0.18;
   return col;
 }
 
@@ -1238,8 +1231,7 @@ vec3 renderScene(vec2 uv, vec2 zuv, int sIdx){
   else if(sIdx == 5) return sceneGlyphs(zuv);
   else if(sIdx == 6) return raymarch3D(uv, 6); // bubbles
   else if(sIdx == 7) return raymarch3D(uv, 7); // tunnel
-  else if(sIdx == 8) return sceneIris(zuv);    // iris lens
-  else               return sceneMandala(zuv); // mandala
+  else               return sceneIris(zuv);    // iris lens
 }
 
 void main(){
@@ -1936,7 +1928,6 @@ const SCENES = [
   { name:'bubble nebula',     palette:4, fb:0.78 },
   { name:'hyper tunnel',      palette:5, fb:0.82 },
   { name:'iris lens',         palette:2, fb:0.76 },
-  { name:'mandala',           palette:5, fb:0.84 },
 ];
 
 let currentScene = 0;
