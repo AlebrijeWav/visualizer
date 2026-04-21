@@ -426,9 +426,10 @@ float mapLattice(vec3 p){
   // MANDALA FOLD — reflect xy into N wedges around the forward axis so
   // the lattice unfolds as a radial mandala instead of a rectilinear
   // grid. Same octahedron/cube cells, struts, and morphing; just
-  // arranged radially. `kaleido` preserves |p.xy| (pure reflection) so
-  // the SDF stays Lipschitz-1 safe for raymarching. Wedge count steps
-  // every ~5s and bass picks among the steps for live variation.
+  // arranged radially. The kaleido helper preserves |p.xy| (pure
+  // reflection) so the SDF stays Lipschitz-1 safe for raymarching.
+  // Wedge count steps every ~5s and bass picks among the steps for
+  // live variation.
   float wedges = 6.0 + 2.0 * mod(floor(uTime*0.20 + uBass*1.5), 4.0); // 6,8,10,12
   p.xy = kaleido(p.xy, wedges);
 
