@@ -549,28 +549,42 @@ float mapBubbles(vec3 p){
   return smin(d1, d2, 0.40);
 }
 
-// HYPER TUNNEL — 6-petal corridor you fly down the middle of
+// HYPER TUNNEL — paneled 6-petal corridor with bands, studs, and a snaking path
 float mapTunnel(vec3 p){
   p.z += uFwd * 1.35;
-  // Gentle twist (aggressive twist breaks SDF Lipschitz property)
-  float tw = p.z * 0.10 + uTime*0.15;
+
+  // Lateral serpentine — the tunnel itself bends as you fly
+  p.x += sin(p.z * 0.18 + uTime*0.20) * 0.28;
+  p.y += cos(p.z * 0.15 + uTime*0.18) * 0.22;
+
+  // Stronger twist that also kicks on beats, so the walls swirl past you
+  float tw = p.z * 0.18 + uTime*0.22 + uBeatDecay*0.22;
   p.xy *= rot(tw);
 
   float r = length(p.xy);
   float a = atan(p.y, p.x);
 
-  // 6-petal tube radius, pulsing with bass + beats
-  float petalR = 1.65 + 0.22*sin(a*6.0 + uTime*0.40)
+  // 6-petal base radius with bass/beat pulse
+  float petalR = 1.62 + 0.22*sin(a*6.0 + uTime*0.40)
                       + uBass*0.14 + uBeatDecay*0.09;
 
-  // Thin wall shell: distance to a tube at radius petalR
-  float wall = abs(r - petalR) - 0.08;
+  // PANEL CHECKERBOARD — 8 angular × z-periodic bumps carve a tiled look
+  // onto the interior surface so the walls read as architectural paneling
+  float panelA = sin(a * 8.0);
+  float panelZ = sin(p.z * 2.4 + uTime*0.3);
+  petalR += panelA * panelZ * 0.05;
 
-  // Periodic ring bands along z — alternating wall thickness
-  float zBand = sin(p.z * 2.6 + uTime*0.55);
-  float rings = abs(r - petalR) - (0.16 + zBand * 0.05);
+  // ARCHITECTURAL RINGS — inward bulges every ~1.2z; you fly THROUGH them
+  float ringPhase = fract(p.z * 0.85 + 0.5);
+  float ringMask = 1.0 - smoothstep(0.0, 0.18, abs(ringPhase - 0.5));
+  petalR -= ringMask * 0.09;
 
-  return min(wall, rings);
+  // STUD ACCENTS — small bumps where rings cross panel peaks, beat-reactive
+  float studA = smoothstep(0.86, 1.0, abs(sin(a * 18.0)));
+  petalR -= ringMask * studA * (0.03 + uBeatDecay*0.02);
+
+  // Single wall shell around the fully modulated radius
+  return abs(r - petalR) - 0.08;
 }
 
 // Unified scene SDF dispatcher — used by collision detection too
