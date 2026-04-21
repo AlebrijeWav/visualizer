@@ -109,49 +109,56 @@ color: #000;
 .meta s { text-decoration: none; color: var(--paper); }
 
 .scene-info { display: flex; align-items: flex-end; }
+/* Unified bottom player bar — buttons + inline waveform + time */
 .controls {
-pointer-events: auto;
-display: flex; gap: 4px; padding: 4px;
-background: rgba(0,0,0,0.5); backdrop-filter: blur(12px);
-border: 1px solid var(--line);
+  pointer-events: auto;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  gap: 4px; padding: 4px 6px;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  width: 100%;
+  min-width: 0;
 }
 .ctrl {
-background: transparent; color: var(--paper); border: none;
-width: 44px; height: 44px;
-display: flex; align-items: center; justify-content: center;
-cursor: pointer; transition: all 0.15s ease;
+  background: transparent; color: var(--paper); border: none;
+  width: 44px; height: 44px; flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.15s ease;
 }
 .ctrl:hover, .ctrl:active { background: rgba(242,239,230,0.12); }
 .ctrl.active { background: var(--accent); color: #000; }
 .ctrl svg { width: 18px; height: 18px; stroke-width: 1.6; }
 
-/* Waveform scrub bar (SoundCloud-style) */
-.timeline {
-  pointer-events: auto;
-  margin-top: 12px;
-  display: flex; align-items: center; gap: 10px;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line);
-  padding: 8px 12px;
+/* Inline waveform + time group — grows to fill between button clusters */
+.wave-group {
+  flex: 1 1 0; min-width: 0;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 6px;
+  overflow: hidden;
 }
-.timeline[hidden] { display: none; }
+.wave-group[hidden] { display: none; }
 .t-label {
   font-family: 'Courier New', monospace;
-  font-size: 10px; letter-spacing: 0.12em; color: var(--muted);
-  min-width: 36px; text-align: center;
+  font-size: 10px; letter-spacing: 0.08em; color: var(--muted);
+  min-width: 34px; text-align: center;
   font-variant-numeric: tabular-nums;
   user-select: none;
+  flex: 0 0 auto;
 }
 #waveCanvas {
-  flex: 1; height: 40px; display: block;
+  flex: 1 1 0; min-width: 0;
+  width: auto; height: 32px;
+  display: block;
+  position: static;
   cursor: pointer; touch-action: none;
-  position: static; width: 100%;
 }
 @media (max-width: 480px) {
-  .timeline { padding: 6px 10px; gap: 8px; }
-  #waveCanvas { height: 32px; }
-  .t-label { font-size: 9px; min-width: 32px; }
+  .wave-group { gap: 6px; padding: 0 4px; }
+  #waveCanvas { height: 28px; }
+  .t-label { font-size: 9px; min-width: 30px; letter-spacing: 0.04em; }
+  .ctrl { width: 40px; height: 40px; }
 }
 
 .x { position: fixed; width: 12px; height: 12px; opacity: 0.35; z-index: 5; pointer-events: none; transition: opacity 0.5s; }
@@ -275,26 +282,24 @@ pointer-events: none;
     </div>
   </div>
   <div class="bottom-group">
-    <div class="bottom">
-      <div class="scene-info">
-        <div class="stamp"><b>now playing</b><i id="scene-name">—</i></div>
-      </div>
-      <div class="controls">
-        <button class="ctrl" id="playpause" aria-label="Play/Pause">
-          <svg viewBox="0 0 24 24" fill="currentColor" id="playpauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
-        </button>
-        <button class="ctrl" id="full" aria-label="Fullscreen">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
-        </button>
-        <button class="ctrl" id="hide" aria-label="Hide HUD">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
-        </button>
-      </div>
+    <div class="scene-info">
+      <div class="stamp"><b>now playing</b><i id="scene-name">—</i></div>
     </div>
-    <div class="timeline" id="timeline" hidden>
-      <span class="t-label" id="tCur">0:00</span>
-      <canvas id="waveCanvas" aria-label="Seek waveform"></canvas>
-      <span class="t-label" id="tDur">0:00</span>
+    <div class="controls" id="playerBar">
+      <button class="ctrl" id="playpause" aria-label="Play/Pause">
+        <svg viewBox="0 0 24 24" fill="currentColor" id="playpauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <div class="wave-group" id="timeline" hidden>
+        <span class="t-label" id="tCur">0:00</span>
+        <canvas id="waveCanvas" aria-label="Seek waveform"></canvas>
+        <span class="t-label" id="tDur">0:00</span>
+      </div>
+      <button class="ctrl" id="full" aria-label="Fullscreen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+      </button>
+      <button class="ctrl" id="hide" aria-label="Hide HUD">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M2 12s4-8 10-8 10 8 10 8-4 8-10 8-10-8-10-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>
+      </button>
     </div>
   </div>
 </div>
@@ -508,7 +513,8 @@ float mapBubbles(vec3 p){
   p.y += cos(uTime*0.14) * 0.24;
   p.xz *= rot(uTime*0.03 + uBass*0.08);
 
-  float CELL = 1.25;
+  // Larger cells + higher threshold = much sparser nebula
+  float CELL = 1.55;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q = mod(p + CELL*0.5, CELL) - CELL*0.5;
 
@@ -517,12 +523,13 @@ float mapBubbles(vec3 p){
   float h3 = fract(sin(dot(cellId, vec3(53.7, 113.5, 179.3)))*43758.5453);
 
   // Off-center sphere per cell = organic, not grid-aligned
-  vec3 off = (vec3(h1, h2, h3) - 0.5) * 0.35;
+  vec3 off = (vec3(h1, h2, h3) - 0.5) * 0.40;
 
-  float existence = smoothstep(0.28, 0.52, h1);
+  // Higher threshold -> far fewer bubbles (~32% fill vs ~60%)
+  float existence = smoothstep(0.52, 0.74, h1);
   // Slow per-cell breathing + bass pulse
   float breath = 0.04 * sin(uTime*1.6 + h1*18.0);
-  float radius = (0.34 + h2*0.18 + uBass*0.22 + uBeatDecay*0.10 + breath) * existence;
+  float radius = (0.28 + h2*0.16 + uBass*0.20 + uBeatDecay*0.09 + breath) * existence;
   radius = max(radius, 0.001);
 
   float d1 = sdSphere(q - off, radius);
@@ -533,13 +540,13 @@ float mapBubbles(vec3 p){
   float h1b = fract(sin(dot(cellId2, vec3(127.1, 311.7, 74.7)))*43758.5453);
   float h2b = fract(sin(dot(cellId2, vec3(91.7, 217.3, 51.1)))*43758.5453);
   float h3b = fract(sin(dot(cellId2, vec3(53.7, 113.5, 179.3)))*43758.5453);
-  vec3 off2 = (vec3(h1b, h2b, h3b) - 0.5) * 0.35;
-  float eb = smoothstep(0.28, 0.52, h1b);
-  float radiusB = (0.34 + h2b*0.18 + uBass*0.22 + uBeatDecay*0.10) * eb;
+  vec3 off2 = (vec3(h1b, h2b, h3b) - 0.5) * 0.40;
+  float eb = smoothstep(0.52, 0.74, h1b);
+  float radiusB = (0.28 + h2b*0.16 + uBass*0.20 + uBeatDecay*0.09) * eb;
   radiusB = max(radiusB, 0.001);
   float d2 = sdSphere(q2 - off2, radiusB);
 
-  return smin(d1, d2, 0.35);
+  return smin(d1, d2, 0.40);
 }
 
 // HYPER TUNNEL — 6-petal corridor you fly down the middle of
@@ -1622,7 +1629,7 @@ function drawWaveform(){
   const frac = Math.max(0, Math.min(1, currentPlayPosition() / decodedBuffer.duration));
   const playX = frac * W;
 
-  // Waveform bars — bright red up to playhead, dimmed paper beyond.
+  // Waveform bars — bright paper up to playhead, dimmed paper beyond.
   for(let i = 0; i < n; i++){
     const x = i * barW;
     const cx = x + barW * 0.5;
@@ -1630,13 +1637,13 @@ function drawWaveform(){
     // Floor so very quiet sections still show a hairline.
     const h = Math.max(dpr, amp * (H - dpr * 2));
     const played = cx <= playX;
-    waveCtx.fillStyle = played ? '#ff3422' : 'rgba(242,239,230,0.35)';
+    waveCtx.fillStyle = played ? 'rgba(242,239,230,0.95)' : 'rgba(242,239,230,0.30)';
     waveCtx.fillRect(Math.floor(x), Math.floor(midY - h/2),
                      Math.max(1, Math.floor(barW - gap)), Math.ceil(h));
   }
 
   // Playhead line.
-  waveCtx.fillStyle = 'rgba(242,239,230,0.95)';
+  waveCtx.fillStyle = '#ffffff';
   waveCtx.fillRect(Math.max(0, Math.floor(playX) - 1), 0, Math.max(1, Math.floor(dpr)) + 1, H);
 }
 
