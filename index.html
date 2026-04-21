@@ -423,59 +423,59 @@ vec2 kaleido(vec2 p, float n){
 float mapLattice(vec3 p){
   p.z += uFwd * 1.0;
 
-  // MANDALA FOLD — reflect xy into N wedges around the forward axis so
-  // the lattice unfolds as a radial mandala instead of a rectilinear
-  // grid. Same octahedron/cube cells, struts, and morphing; just
-  // arranged radially. The kaleido helper preserves |p.xy| (pure
-  // reflection) so the SDF stays Lipschitz-1 safe for raymarching.
-  // Wedge count steps every ~5s and bass picks among the steps for
-  // live variation.
-  float wedges = 6.0 + 2.0 * mod(floor(uTime*0.20 + uBass*1.5), 4.0); // 6,8,10,12
+  // MANDALA FOLD — reflect xy into N wedges around the forward axis.
+  // Fewer wedges (4-7 vs 6-12) keeps the mandala legible rather than
+  // feeling like a blur of repeated cells. Step cadence is slower too.
+  // kaleido is an isometry on xy so the SDF stays Lipschitz-1 safe.
+  float wedges = 4.0 + mod(floor(uTime*0.12), 4.0); // 4,5,6,7 every ~8s
   p.xy = kaleido(p.xy, wedges);
 
-  // Rotate the whole folded mandala; bass feeds the spin speed
-  p.xy *= rot(uTime*0.06 + uBass*0.25);
-  p.xz *= rot(uTime*0.03);
-  // Lower warp amount than before so the radial symmetry stays readable
-  p = warpDomain(p, 0.22);
+  // Gentler rotation of the whole mandala
+  p.xy *= rot(uTime*0.04 + uBass*0.15);
+  p.xz *= rot(uTime*0.02);
+  // Lower warp so the symmetry reads clean
+  p = warpDomain(p, 0.18);
 
-  float CELL = 1.4;
+  // Larger cells = more air between shapes
+  float CELL = 1.8;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q1 = mod(p + CELL*0.5, CELL) - CELL*0.5;
   float cellH = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
   float cellH2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
 
-  // Per-cell spin — each octahedron tumbles at its own rate so the field
-  // never reads as a static grid. Apply to a copy of q1 so the axis-aligned
-  // struts below stay stable.
+  // Only ~55% of cells fire — thinner mandala, not a dense wall
+  float existence = smoothstep(0.35, 0.55, cellH);
+
+  // Per-cell spin — gentler tumble
   vec3 qRot = q1;
-  float spin = uTime * 0.40 + cellH * TAU + uBeatDecay * 0.9;
+  float spin = uTime * 0.30 + cellH * TAU + uBeatDecay * 0.6;
   qRot.xy *= rot(spin);
   qRot.yz *= rot(spin * 0.7);
 
-  // Shape size — capped so growth can't overwhelm the cell. Max is ~0.52
-  // (vs CELL/2 = 0.70), leaving clearance for the camera on strong beats.
-  float shapeSize = 0.18 + cellH * 0.12 + uBass * 0.16 + uBeatDecay * 0.08;
+  // Smaller shape — max ~0.42 (vs CELL/2 = 0.90), much more breathing room
+  float shapeSize = (0.14 + cellH * 0.10 + uBass * 0.12 + uBeatDecay * 0.06) * existence;
+  shapeSize = max(shapeSize, 0.001);
 
-  // SHAPE MORPH — each cell slowly crossfades octahedron ↔ rounded cube,
-  // phase-offset by hash so neighbors morph out of sync. Mid-band of the
-  // song biases the blend so the vibe shifts with the melody.
-  float morphT = uTime * 0.28 + uMid * 2.0 + cellH * 3.14;
+  // Shape morph kept (it's the vibe) but on a slower clock
+  float morphT = uTime * 0.20 + uMid * 1.4 + cellH * 3.14;
   float morph = 0.5 + 0.5 * sin(morphT);
   float oct = sdOct(qRot, shapeSize);
   float box = sdBox(qRot, vec3(shapeSize * 0.72));
   float shape = mix(oct, box, morph);
 
-  // Connecting struts — thickness pulses with treble
+  // Thinner struts, and only draw on half the cells to stop the grid
+  // from reading as a solid lattice. Per-cell hash gates whether struts
+  // are even present in that cell.
+  float strutGate = smoothstep(0.55, 0.70, cellH2);
   vec3 ap = abs(q1);
-  float STRUT = 0.030 + uTreb * 0.030;
+  float STRUT = (0.020 + uTreb * 0.020) * strutGate + 0.001;
   float strutX = max(ap.y, ap.z) - STRUT;
   float strutY = max(ap.x, ap.z) - STRUT;
   float strutZ = max(ap.x, ap.y) - STRUT;
   float struts = min(min(strutX, strutY), strutZ);
 
-  // Smooth union — blend radius grows on beats to goo shapes together
-  float d = smin(shape, struts, 0.06 + uBeatDecay * 0.06);
+  // Smooth union — blend radius smaller so features stay distinct
+  float d = smin(shape, struts, 0.04 + uBeatDecay * 0.04);
   return d;
 }
 
@@ -1340,10 +1340,26 @@ vec3 layerGlyphs(vec2 uv){
 }
 
 vec3 layerIris(vec2 uv){
-  // Sparse lens grid — just rings + sparkles, no background or disk body.
-  // Density is half of primary iris so it reads as accent, not coverage.
-  vec2 p = uv * (3.6 + uBass*0.8);
-  p += vec2(uTime*0.12, uTime*0.08);
+  // Sparse lens grid with a lot more motion:
+  //   - whole field rotates slowly around screen center
+  //   - swirl warp drifts the uv in opposing directions by radius
+  //   - grid scroll speed varies sinusoidally (not a constant rate)
+  //   - per-cell q is rotated by a per-cell phase so each lens spins
+  //   - lens size breathes on mid + beat
+  float fieldAng = uTime * 0.08 + uBass * 0.3;
+  vec2 sp = uv * rot(fieldAng);
+
+  // Swirl: farther from center drifts opposite to inner ring
+  float rWorld = length(uv) + 0.001;
+  float swirl = sin(rWorld * 3.0 - uTime * 0.6);
+  sp *= rot(swirl * 0.25);
+
+  // Grid scale pulses with music + a slow 9s sine
+  float scale = 3.2 + 0.8 * sin(uTime*0.11) + uBass * 1.0;
+  vec2 p = sp * scale;
+  // Non-linear scroll speed — drifts, reverses, surges
+  p += vec2(sin(uTime*0.22)*1.2, cos(uTime*0.17)*0.9) + uTime*0.08;
+
   float row = floor(p.y);
   float rowShift = mod(row, 2.0) * 0.5;
   vec2 cellId = vec2(floor(p.x - rowShift), row);
@@ -1352,18 +1368,25 @@ vec3 layerIris(vec2 uv){
   float h  = hash(cellId);
   float h2 = hash(cellId + 7.1);
 
-  // Only ~30% of cells get a lens ring — keeps coverage low
+  // Only ~30% of cells get a lens
   if(h < 0.70) return vec3(0.0);
 
-  float r = length(q);
-  float ringFreq = 18.0 + h*8.0;
-  float ringPhase = -uTime*(1.2 + uTreb*2.0) - h*TAU + uBeatDecay*5.0;
-  // Thin bright ring (sinusoid raised high) so only crests show
-  float ring = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(r * ringFreq + ringPhase));
-  float mask = smoothstep(0.44, 0.40, r);  // fades to 0 outside lens radius
+  // Per-lens spin — each lens rotates its own ring pattern
+  q *= rot(uTime * (0.6 + h*1.2) + h * TAU);
 
-  // Chromatic fringe offsets
-  float caOff = 0.005 + uBeatDecay*0.015;
+  float r = length(q);
+  // Ring frequency modulates per cell AND over time — the rings pulse
+  // in/out instead of sitting at one spacing
+  float ringFreq = 16.0 + h*10.0 + 4.0 * sin(uTime*0.4 + h*TAU);
+  float ringPhase = -uTime*(1.8 + uTreb*2.5) - h*TAU + uBeatDecay*6.0;
+  float ring = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(r * ringFreq + ringPhase));
+
+  // Lens radius breathes — grows with mid/beat, sinusoidal baseline
+  float lensR = 0.38 + 0.06*sin(uTime*0.8 + h*TAU) + uMid*0.08 + uBeatDecay*0.06;
+  float mask = smoothstep(lensR, lensR - 0.05, r);
+
+  // Chromatic fringe — wider on beats
+  float caOff = 0.005 + uBeatDecay*0.022 + uBass*0.006;
   float rR = length(q - vec2(caOff, 0.0));
   float rB = length(q + vec2(caOff, 0.0));
   vec3 iri = vec3(
@@ -1373,9 +1396,10 @@ vec3 layerIris(vec2 uv){
   );
 
   vec3 col = iri * mask;
-  // Sparkle core — brief bright points on treble/beats
-  float sparkle = step(0.88 - uBass*0.08, h2) * smoothstep(0.06, 0.0, r);
-  col += vec3(1.05, 1.0, 0.95) * sparkle * (0.25 + uTreb*0.9 + uBeatDecay*0.5);
+  // Sparkle core — brief bright points on treble/beats, wobbles position
+  vec2 sq = q + vec2(sin(uTime*2.0 + h*TAU), cos(uTime*1.7 + h*TAU)) * 0.04;
+  float sparkle = step(0.85 - uBass*0.10, h2) * smoothstep(0.06, 0.0, length(sq));
+  col += vec3(1.05, 1.0, 0.95) * sparkle * (0.30 + uTreb*1.0 + uBeatDecay*0.6);
   return col;
 }
 
@@ -1417,16 +1441,18 @@ void main(){
   }
 
   // ============= OVERLAY LAYERS =============
-  // Glyph + iris live here as additive accents on top of whatever primary
-  // scene is active, instead of being their own full scenes. Intensity
-  // gates on treble / beats so they appear as music-reactive highlights
-  // rather than static coverage. Skip on glitch (sA==4) since that scene
-  // is already very busy and we want it to read clean.
+  // Glyph + iris come and go rather than sit ever-present. Each layer
+  // has a slow sinusoidal presence envelope (clamped to 0) so it fades
+  // in, hangs briefly, fades out — invisible for most of each cycle.
+  // The two cycles are phase-offset so they rarely share the frame.
+  // Still gated off during glitch (sA==4) so that scene reads clean.
   float overlayGate = (sA == 4) ? 0.0 : 1.0;
-  // Glyph layer: faint baseline, punches up on treble + beats
-  col += layerGlyphs(zuv) * (0.08 + uTreb * 0.35 + uBeatDecay * 0.20) * overlayGate;
-  // Iris layer: mostly quiet, flares on beats (chromatic ring accents)
-  col += layerIris(zuv) * (0.05 + uBeatDecay * 0.35 + uMid * 0.10) * overlayGate;
+  // Glyph presence: ~24s cycle, peak ~6s then dark — strict clamp to 0
+  float glyphPulse = max(0.0, sin(uTime * 0.26) - 0.45) / 0.55; // 0..1 window
+  col += layerGlyphs(zuv) * glyphPulse * (0.6 + uTreb * 0.7 + uBeatDecay * 0.4) * overlayGate;
+  // Iris presence: ~32s cycle, offset so it rarely overlaps glyphs
+  float irisPulse = max(0.0, sin(uTime * 0.20 + 2.4) - 0.45) / 0.55;
+  col += layerIris(zuv) * irisPulse * (0.55 + uBeatDecay * 0.8 + uMid * 0.25) * overlayGate;
 
   // ============= SHARED ATMOSPHERE LAYER =============
   // Rendered above the scene so it persists across crossfades — ties the
