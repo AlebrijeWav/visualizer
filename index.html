@@ -459,17 +459,19 @@ float mapVoxels(vec3 p){
   p.xz *= rot(uTime*0.05 + uBass*0.10);
   p.xy *= rot(uTime*0.02);
 
-  float CELL = 1.4;
+  // Larger cells + higher existence threshold = more air between cubes
+  float CELL = 1.7;
   vec3 cellId = floor((p + CELL*0.5) / CELL);
   vec3 q = mod(p + CELL*0.5, CELL) - CELL*0.5;
 
   float h1 = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
   float h2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
 
-  float existence = smoothstep(0.50, 0.65, h1);
+  // Higher threshold -> fewer filled cells (~28% vs ~42%)
+  float existence = smoothstep(0.64, 0.78, h1);
 
   // Cube size now visibly pumps with bass + beats
-  float vSize = (0.20 + h2 * 0.30 + uBass * 0.16 + uBeatDecay * 0.08) * existence;
+  float vSize = (0.20 + h2 * 0.28 + uBass * 0.16 + uBeatDecay * 0.08) * existence;
   vSize = max(vSize, 0.001);
 
   return sdBox(q, vec3(vSize));
@@ -498,11 +500,80 @@ float mapCrystals(vec3 p){
   return sdOct(vec3(q.x, q.y, zPos), crysSize);
 }
 
+// BUBBLE NEBULA — organic metaball spheres that merge softly, breathing with bass
+float mapBubbles(vec3 p){
+  p.z += uFwd * 1.05;
+  // Gentle drift to feel like floating through a cloud
+  p.x += sin(uTime*0.18) * 0.30;
+  p.y += cos(uTime*0.14) * 0.24;
+  p.xz *= rot(uTime*0.03 + uBass*0.08);
+
+  float CELL = 1.25;
+  vec3 cellId = floor((p + CELL*0.5) / CELL);
+  vec3 q = mod(p + CELL*0.5, CELL) - CELL*0.5;
+
+  float h1 = fract(sin(dot(cellId, vec3(127.1, 311.7, 74.7)))*43758.5453);
+  float h2 = fract(sin(dot(cellId, vec3(91.7, 217.3, 51.1)))*43758.5453);
+  float h3 = fract(sin(dot(cellId, vec3(53.7, 113.5, 179.3)))*43758.5453);
+
+  // Off-center sphere per cell = organic, not grid-aligned
+  vec3 off = (vec3(h1, h2, h3) - 0.5) * 0.35;
+
+  float existence = smoothstep(0.28, 0.52, h1);
+  // Slow per-cell breathing + bass pulse
+  float breath = 0.04 * sin(uTime*1.6 + h1*18.0);
+  float radius = (0.34 + h2*0.18 + uBass*0.22 + uBeatDecay*0.10 + breath) * existence;
+  radius = max(radius, 0.001);
+
+  float d1 = sdSphere(q - off, radius);
+
+  // Blend with the +x neighbour so adjacent spheres fuse into metaballs
+  vec3 cellId2 = cellId + vec3(1.0, 0.0, 0.0);
+  vec3 q2 = q - vec3(CELL, 0.0, 0.0);
+  float h1b = fract(sin(dot(cellId2, vec3(127.1, 311.7, 74.7)))*43758.5453);
+  float h2b = fract(sin(dot(cellId2, vec3(91.7, 217.3, 51.1)))*43758.5453);
+  float h3b = fract(sin(dot(cellId2, vec3(53.7, 113.5, 179.3)))*43758.5453);
+  vec3 off2 = (vec3(h1b, h2b, h3b) - 0.5) * 0.35;
+  float eb = smoothstep(0.28, 0.52, h1b);
+  float radiusB = (0.34 + h2b*0.18 + uBass*0.22 + uBeatDecay*0.10) * eb;
+  radiusB = max(radiusB, 0.001);
+  float d2 = sdSphere(q2 - off2, radiusB);
+
+  return smin(d1, d2, 0.35);
+}
+
+// HYPER TUNNEL — 6-petal corridor you fly down the middle of
+float mapTunnel(vec3 p){
+  p.z += uFwd * 1.35;
+  // Gentle twist (aggressive twist breaks SDF Lipschitz property)
+  float tw = p.z * 0.10 + uTime*0.15;
+  p.xy *= rot(tw);
+
+  float r = length(p.xy);
+  float a = atan(p.y, p.x);
+
+  // 6-petal tube radius, pulsing with bass + beats
+  float petalR = 1.65 + 0.22*sin(a*6.0 + uTime*0.40)
+                      + uBass*0.14 + uBeatDecay*0.09;
+
+  // Thin wall shell: distance to a tube at radius petalR
+  float wall = abs(r - petalR) - 0.08;
+
+  // Periodic ring bands along z — alternating wall thickness
+  float zBand = sin(p.z * 2.6 + uTime*0.55);
+  float rings = abs(r - petalR) - (0.16 + zBand * 0.05);
+
+  return min(wall, rings);
+}
+
 // Unified scene SDF dispatcher — used by collision detection too
 float sceneSDF(vec3 p, int sIdx){
   if(sIdx==0)      return mapLattice(p);
   else if(sIdx==1) return mapPlasma(p);
   else if(sIdx==2) return mapVoxels(p);
+  else if(sIdx==3) return mapCrystals(p);
+  else if(sIdx==6) return mapBubbles(p);
+  else if(sIdx==7) return mapTunnel(p);
   else             return mapCrystals(p);
 }
 
@@ -551,7 +622,10 @@ vec3 raymarch3D(vec2 uv, int sIdx){
   if(sIdx == 0) baseDist = 4.0;       // lattice
   else if(sIdx == 1) baseDist = 4.0;  // cross temple
   else if(sIdx == 2) baseDist = 4.0;  // voxels
-  else               baseDist = 3.0;  // crystals
+  else if(sIdx == 3) baseDist = 3.0;  // crystals
+  else if(sIdx == 6) baseDist = 3.5;  // bubbles
+  else if(sIdx == 7) baseDist = 0.35; // inside tunnel — camera near axis (non-zero to avoid NaN in normalize)
+  else               baseDist = 3.0;
   float dist = baseDist * uZoom;
 
   vec3 ro = vec3(0.0, 0.0, -dist);
@@ -964,7 +1038,9 @@ vec3 renderScene(vec2 uv, vec2 zuv, int sIdx){
   else if(sIdx == 2) return raymarch3D(uv, 2); // voxels
   else if(sIdx == 3) return raymarch3D(uv, 3); // crystals
   else if(sIdx == 4) return sceneGlitch(zuv);
-  else               return sceneGlyphs(zuv);
+  else if(sIdx == 5) return sceneGlyphs(zuv);
+  else if(sIdx == 6) return raymarch3D(uv, 6); // bubbles
+  else               return raymarch3D(uv, 7); // tunnel
 }
 
 void main(){
@@ -1658,6 +1734,8 @@ const SCENES = [
   { name:'crystal field',     palette:2, fb:0.72 },
   { name:'glitch field',      palette:3, fb:0.78 },
   { name:'glyph storm',       palette:1, fb:0.80 },
+  { name:'bubble nebula',     palette:4, fb:0.78 },
+  { name:'hyper tunnel',      palette:5, fb:0.82 },
 ];
 
 let currentScene = 0;
