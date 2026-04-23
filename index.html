@@ -700,10 +700,10 @@ float mapTunnel(vec3 p){
   return abs(r - petalR) - 0.08;
 }
 
-// Unified scene SDF dispatcher — used by collision detection too.
-// Scene order: 0 mandala-lattice, 1 cross temple, 2 voxels, 3 crystals,
-// 4 glitch (2D, no SDF), 5 bubbles, 6 tunnel.
-float sceneSDF(vec3 p, int sIdx){
+// Single-scene SDF lookup. Glitch (sIdx==4) has no 3D geometry —
+// fall back to crystals so dA/dB numerics stay sane if a caller ever
+// hits that path.
+float sceneSDF1(vec3 p, int sIdx){
   if(sIdx==0)      return mapLattice(p);
   else if(sIdx==1) return mapPlasma(p);
   else if(sIdx==2) return mapVoxels(p);
@@ -713,25 +713,36 @@ float sceneSDF(vec3 p, int sIdx){
   else             return mapCrystals(p);
 }
 
-vec3 calcNormal(vec3 p, int sIdx){
-  // Tetrahedral gradient — 4 taps, slightly more stable than 3-tap fwd diff
+// Scene SDF with built-in A to B geometric morph. During a transition
+// the whole field is mix(sceneA, sceneB, t) -- shapes from A literally
+// deform into shapes from B instead of crossfading by alpha. Linear
+// mix of Lipschitz-1 SDFs is Lipschitz-1 so raymarching stays stable.
+// t=0 -> pure A; t=1 -> pure B; sA==sB -> no morph regardless of t.
+float sceneSDF(vec3 p, int sA, int sB, float t){
+  float dA = sceneSDF1(p, sA);
+  if(t <= 0.001 || sA == sB) return dA;
+  float dB = sceneSDF1(p, sB);
+  return mix(dA, dB, t);
+}
+
+vec3 calcNormal(vec3 p, int sA, int sB, float t){
   const float e = 0.0015;
   vec2 k = vec2(1.0, -1.0);
   return normalize(
-    k.xyy * sceneSDF(p + k.xyy*e, sIdx) +
-    k.yyx * sceneSDF(p + k.yyx*e, sIdx) +
-    k.yxy * sceneSDF(p + k.yxy*e, sIdx) +
-    k.xxx * sceneSDF(p + k.xxx*e, sIdx)
+    k.xyy * sceneSDF(p + k.xyy*e, sA, sB, t) +
+    k.yyx * sceneSDF(p + k.yyx*e, sA, sB, t) +
+    k.yxy * sceneSDF(p + k.yxy*e, sA, sB, t) +
+    k.xxx * sceneSDF(p + k.xxx*e, sA, sB, t)
   );
 }
 
 // 5-tap occlusion sampler — queries SDF along the normal for proper AO
-float calcAO(vec3 p, vec3 n, int sIdx){
+float calcAO(vec3 p, vec3 n, int sA, int sB, float t){
   float occ = 0.0;
   float sca = 1.0;
   for(int i=0; i<5; i++){
     float h = 0.02 + 0.08 * float(i);
-    float d = sceneSDF(p + n*h, sIdx);
+    float d = sceneSDF(p + n*h, sA, sB, t);
     occ += (h - d) * sca;
     sca *= 0.75;
   }
@@ -739,29 +750,32 @@ float calcAO(vec3 p, vec3 n, int sIdx){
 }
 
 // Cheap soft shadow via SDF min-distance penumbra
-float softShadow(vec3 ro, vec3 rd, int sIdx){
+float softShadow(vec3 ro, vec3 rd, int sA, int sB, float t){
   float res = 1.0;
-  float t = 0.02;
+  float tm = 0.02;
   for(int i=0; i<14; i++){
-    float h = sceneSDF(ro + rd*t, sIdx);
+    float h = sceneSDF(ro + rd*tm, sA, sB, t);
     if(h < 0.001) return 0.0;
-    res = min(res, 10.0*h/t);
-    t += clamp(h, 0.04, 0.35);
-    if(t > 6.0) break;
+    res = min(res, 10.0*h/tm);
+    tm += clamp(h, 0.04, 0.35);
+    if(tm > 6.0) break;
   }
   return clamp(res, 0.0, 1.0);
 }
 
-vec3 raymarch3D(vec2 uv, int sIdx){
-  // Per-scene camera distance
-  float baseDist = 4.0;
-  if(sIdx == 0) baseDist = 4.0;       // mandala-lattice
-  else if(sIdx == 1) baseDist = 4.0;  // cross temple
-  else if(sIdx == 2) baseDist = 4.0;  // voxels
-  else if(sIdx == 3) baseDist = 3.0;  // crystals
-  else if(sIdx == 5) baseDist = 3.5;  // bubbles
-  else if(sIdx == 6) baseDist = 0.35; // inside tunnel — camera near axis (non-zero to avoid NaN in normalize)
-  else               baseDist = 3.0;
+// Per-scene camera distance — blended during a transition so the
+// camera eases between baseDists as the SDFs morph.
+float sceneBaseDist(int sIdx){
+  if(sIdx == 3) return 3.0;       // crystals
+  else if(sIdx == 5) return 3.5;  // bubbles
+  else if(sIdx == 6) return 0.35; // inside tunnel (non-zero for normalize)
+  else return 4.0;                 // lattice, temple, voxels, default
+}
+
+vec3 raymarch3D(vec2 uv, int sA, int sB, float t){
+  // Per-scene camera distance — blended so the camera eases between
+  // positions during a scene morph, no abrupt jump.
+  float baseDist = mix(sceneBaseDist(sA), sceneBaseDist(sB), t);
   float dist = baseDist * uZoom;
 
   vec3 ro = vec3(0.0, 0.0, -dist);
@@ -781,40 +795,34 @@ vec3 raymarch3D(vec2 uv, int sIdx){
   float CLEARANCE = 0.55;
   vec3 outward = normalize(ro);
   for(int i = 0; i < 12; i++){
-    float d = sceneSDF(ro, sIdx);
+    float d = sceneSDF(ro, sA, sB, t);
     if(d >= CLEARANCE) break;
     ro += outward * (CLEARANCE - d + 0.01);
   }
 
-  float t = 0.0;
+  float mT = 0.0;               // march distance (renamed -- t is the mix amount)
   float dmin = 999.0;
   vec3 col = vec3(0.0);
   bool hit = false;
   vec3 hitP;
   int steps = 0;
   for(int i=0; i<128; i++){
-    vec3 p = ro + rd*t;
-    float d = sceneSDF(p, sIdx);
+    vec3 p = ro + rd*mT;
+    float d = sceneSDF(p, sA, sB, t);
     dmin = min(dmin, d);
-    // Tight relative epsilon — sharper silhouettes, less stair-step alias
-    float eps = 0.0005 + t * 0.00025;
+    float eps = 0.0005 + mT * 0.00025;
     if(d < eps){ hit = true; hitP = p; steps = i; break; }
-    if(t > 18.0) break;
-    // Slightly conservative step — reduces "skip past thin feature" misses
-    // that show up as ragged edges on struts/crystal points
-    t += d * 0.65;
+    if(mT > 18.0) break;
+    mT += d * 0.65;
     steps = i;
   }
 
   // ===== SILHOUETTE COVERAGE (analytic AA via dmin) =====
-  // dmin = closest the march got to a surface. For a definite hit dmin is
-  // tiny; for a near-miss it's small but non-zero. Map it to a 0..1 coverage
-  // so silhouette edges fade smoothly into background instead of stair-stepping.
-  float aaW = 0.004 + 0.0035 * t;        // soft-edge width grows with distance
+  float aaW = 0.004 + 0.0035 * mT;
   float coverage = 1.0 - smoothstep(0.0, aaW, dmin);
 
   if(hit){
-    vec3 n = calcNormal(hitP, sIdx);
+    vec3 n = calcNormal(hitP, sA, sB, t);
     vec3 v = -rd;
 
     // Two-light rig: warm key + cool fill
@@ -827,10 +835,10 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     float ndotF = max(0.0, dot(n, fillDir));
 
     // Soft shadow only from the key — fill stays unshadowed
-    float sh = softShadow(hitP + n*0.01, keyDir, sIdx);
+    float sh = softShadow(hitP + n*0.01, keyDir, sA, sB, t);
     sh = mix(0.4, 1.0, sh);
 
-    float ao = calcAO(hitP, n, sIdx);
+    float ao = calcAO(hitP, n, sA, sB, t);
 
     // Blinn-Phong specular for a tighter highlight
     vec3 hK = normalize(keyDir + v);
@@ -839,7 +847,7 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     float specF = pow(max(0.0, dot(n, hF)), 24.0) * 0.4;
 
     // Palette-driven surface color, animated by position + bass
-    float pt = t*0.06 + n.x*0.25 + n.y*0.18 + uTime*0.04 + uBass*0.3;
+    float pt = mT*0.06 + n.x*0.25 + n.y*0.18 + uTime*0.04 + uBass*0.3;
     vec3 base = pal(pt);
     vec3 rim  = pal(pt + 0.5);
 
@@ -857,56 +865,83 @@ vec3 raymarch3D(vec2 uv, int sIdx){
     col += pal(pt + 0.3) * fres * (0.25 + uMid*0.5);
 
     // ===== PER-SCENE FINISHING PASSES =====
-    // Each reference image has a distinct material language; these blocks
-    // lean the default shading toward that image's aesthetic.
-    if(sIdx == 1){
-      // CROSS TEMPLE (image 3): recessed emerald walls with glowing gold
-      // edges. Darken the body, inject a deep green undertone into the
-      // shadows, then lay a hot gold Fresnel line along silhouettes.
-      col *= 0.72;
-      col += vec3(0.04, 0.38, 0.22) * (1.0 - ndotK*sh) * 0.42;
+    // Each reference image has a distinct material language. During a
+    // transition we crossfade finishing from A to B using weights wA/wB
+    // so the material "feel" morphs along with the geometry.
+    float wA = 1.0 - t;
+    float wB = t;
+    vec3 colA = col, colB = col;
+
+    // Temple (sIdx 1) finishing — applied to whichever side matches
+    if(sA == 1){
+      colA *= 0.72;
+      colA += vec3(0.04, 0.38, 0.22) * (1.0 - ndotK*sh) * 0.42;
       float edge = pow(1.0 - max(0.0, dot(n, v)), 5.0);
-      col += vec3(1.45, 1.10, 0.35) * edge * (1.15 + uBeatDecay*0.35);
-    } else if(sIdx == 2){
-      // VOXEL CLUSTER (image 4): cel-shaded towers with bright white edges
-      // and a warm sunrise back-light. Quantize the diffuse into discrete
-      // bands for the toon look, then overdrive a narrow Fresnel band for
-      // the white outlines.
+      colA += vec3(1.45, 1.10, 0.35) * edge * (1.15 + uBeatDecay*0.35);
+    }
+    if(sB == 1){
+      colB *= 0.72;
+      colB += vec3(0.04, 0.38, 0.22) * (1.0 - ndotK*sh) * 0.42;
+      float edge = pow(1.0 - max(0.0, dot(n, v)), 5.0);
+      colB += vec3(1.45, 1.10, 0.35) * edge * (1.15 + uBeatDecay*0.35);
+    }
+
+    // Voxels (sIdx 2) — cel shading. Replaces col entirely when active.
+    if(sA == 2){
       float diff = clamp(ndotK * sh + ndotF*0.35, 0.0, 1.0);
       float cel  = floor(diff * 3.0 + 0.5) / 3.0;
       vec3 celShadow = vec3(0.06, 0.10, 0.16);
       vec3 celLit    = vec3(1.05, 1.00, 0.88);
-      col = base * mix(celShadow, celLit, cel) * ao;
-      // Warm rim opposing the key — sunrise peeks between towers
+      colA = base * mix(celShadow, celLit, cel) * ao;
       vec3 backDir = normalize(vec3(0.30, -0.15, 0.95));
       float back = max(0.0, dot(n, backDir));
-      col += vec3(1.40, 0.72, 0.26) * pow(back, 2.5) * (0.45 + uBass*0.35);
-      // Hard white silhouette outline
+      colA += vec3(1.40, 0.72, 0.26) * pow(back, 2.5) * (0.45 + uBass*0.35);
       float edge = pow(1.0 - max(0.0, dot(n, v)), 22.0);
-      col += vec3(1.0) * edge * 1.5;
-    } else if(sIdx == 5){
-      // BUBBLE NEBULA (image 1): iridescent thin-film dispersion. Mix a
-      // rainbow wash into the body proportional to Fresnel so grazing
-      // angles shimmer with dispersion while centers stay the base color.
+      colA += vec3(1.0) * edge * 1.5;
+    }
+    if(sB == 2){
+      float diff = clamp(ndotK * sh + ndotF*0.35, 0.0, 1.0);
+      float cel  = floor(diff * 3.0 + 0.5) / 3.0;
+      vec3 celShadow = vec3(0.06, 0.10, 0.16);
+      vec3 celLit    = vec3(1.05, 1.00, 0.88);
+      colB = base * mix(celShadow, celLit, cel) * ao;
+      vec3 backDir = normalize(vec3(0.30, -0.15, 0.95));
+      float back = max(0.0, dot(n, backDir));
+      colB += vec3(1.40, 0.72, 0.26) * pow(back, 2.5) * (0.45 + uBass*0.35);
+      float edge = pow(1.0 - max(0.0, dot(n, v)), 22.0);
+      colB += vec3(1.0) * edge * 1.5;
+    }
+
+    // Bubbles (sIdx 5) — iridescent dispersion
+    if(sA == 5){
       float fIri = pow(1.0 - max(0.0, dot(n, v)), 1.4);
       vec3 iriCol = 0.5 + 0.5*cos(TAU * vec3(1.00, 0.92, 0.80) * fIri
                                  + vec3(0.0, 0.33, 0.67)
                                  + uTime*0.12);
-      col = mix(col, col * 1.45 * iriCol, fIri * 0.55);
-      // Bright specular pinpoint on the rim
+      colA = mix(colA, colA * 1.45 * iriCol, fIri * 0.55);
       float rimDot = pow(1.0 - max(0.0, dot(n, v)), 8.0);
-      col += iriCol * rimDot * 0.6 * (0.5 + uMid*0.5);
+      colA += iriCol * rimDot * 0.6 * (0.5 + uMid*0.5);
+    }
+    if(sB == 5){
+      float fIri = pow(1.0 - max(0.0, dot(n, v)), 1.4);
+      vec3 iriCol = 0.5 + 0.5*cos(TAU * vec3(1.00, 0.92, 0.80) * fIri
+                                 + vec3(0.0, 0.33, 0.67)
+                                 + uTime*0.12);
+      colB = mix(colB, colB * 1.45 * iriCol, fIri * 0.55);
+      float rimDot = pow(1.0 - max(0.0, dot(n, v)), 8.0);
+      colB += iriCol * rimDot * 0.6 * (0.5 + uMid*0.5);
     }
 
+    // Blend finishings by mix weight — same linear blend as the geometry
+    col = mix(colA, colB, t);
+
     // ===== NEAR-CLIP FADE =====
-    // Narrow window — fade only when almost touching surface
-    float nearFade = smoothstep(0.0, 0.35, t);
+    float nearFade = smoothstep(0.0, 0.35, mT);
     col *= nearFade;
 
     // ===== DISTANCE FOG =====
-    // Tinted fog using a slowly shifting palette color — adds depth + mood
     vec3 fogCol = pal(uTime*0.03 + 0.6) * 0.35;
-    float fogAmt = 1.0 - exp(-t * 0.11);
+    float fogAmt = 1.0 - exp(-mT * 0.11);
     col = mix(col, fogCol, fogAmt * 0.55);
     // Apply silhouette coverage so the hit color fades to 0 at the edge
     // instead of dropping to background in one pixel.
@@ -1403,17 +1438,18 @@ vec3 layerIris(vec2 uv){
   return col;
 }
 
-// Dispatches to the right scene. uv is centered/normalized; zuv is the
-// zoomed/rotated uv used for the 2D patterns. Glyph + iris are no longer
-// primary scenes — they live as additive layers in main().
+// Render a single scene (A or B) without any SDF morph — used when we
+// still need a "pure" scene render (e.g. rendering just the 3D side
+// during a glitch-involving transition, or during steady-state play).
 vec3 renderScene(vec2 uv, vec2 zuv, int sIdx){
-  if(sIdx == 0)      return raymarch3D(uv, 0); // mandala lattice
-  else if(sIdx == 1) return raymarch3D(uv, 1); // cross temple
-  else if(sIdx == 2) return raymarch3D(uv, 2); // voxels
-  else if(sIdx == 3) return raymarch3D(uv, 3); // crystals
-  else if(sIdx == 4) return sceneGlitch(zuv);  // glitch — primary but short
-  else if(sIdx == 5) return raymarch3D(uv, 5); // bubbles
-  else               return raymarch3D(uv, 6); // tunnel
+  if(sIdx == 4) return sceneGlitch(zuv);        // glitch is 2D
+  return raymarch3D(uv, sIdx, sIdx, 0.0);       // single-scene raymarch
+}
+
+// Render a geometric A↔B morph in one raymarch pass. Requires both
+// scenes to be 3D SDFs — caller guarantees sA != 4 && sB != 4.
+vec3 renderSceneMorph(vec2 uv, int sA, int sB, float t){
+  return raymarch3D(uv, sA, sB, t);
 }
 
 void main(){
@@ -1425,19 +1461,31 @@ void main(){
   int sA = int(uSceneA + 0.5);
   int sB = int(uSceneB + 0.5);
 
-  // Render A always. Render B only during a crossfade (uSceneMix > 0).
-  vec3 col = renderScene(uv, zuv, sA);
-  if(uSceneMix > 0.001){
+  // ============= SCENE RENDER / MORPH =============
+  // Two transition paths:
+  //   1) 3D ↔ 3D  → one raymarch pass with geometric mix(sdfA, sdfB, t).
+  //      Shapes from A literally deform into shapes from B — seamless.
+  //   2) Any scene ↔ glitch (2D, no SDF) → fall back to the old noise-
+  //      dissolve crossfade since we can't SDF-morph against a 2D scene.
+  vec3 col;
+  bool transitioning = uSceneMix > 0.001 && sA != sB;
+  bool glitchInvolved = transitioning && (sA == 4 || sB == 4);
+
+  if(transitioning && !glitchInvolved){
+    // Geometric morph in a single raymarch
+    col = renderSceneMorph(uv, sA, sB, uSceneMix);
+  } else if(transitioning && glitchInvolved){
+    // Noise-dissolve crossfade (A + B rendered separately)
+    vec3 colA = renderScene(uv, zuv, sA);
     vec3 colB = renderScene(uv, zuv, sB);
-    // Noise-dissolve mask adds organic texture to the crossfade — instead of
-    // a flat lerp, patches of B reveal through A following a low-freq noise field.
     float dis = fbm(uv * 3.0 + uTime * 0.4);
     float bias = uSceneMix * 1.35 - 0.15;
     float dissolve = smoothstep(bias - 0.25, bias + 0.25, dis);
-    // Blend the noise mask with a pure lerp so it feels organic but still
-    // reaches 100% B at the end of the transition.
     float mixAmt = mix(uSceneMix, dissolve, 0.6);
-    col = mix(col, colB, mixAmt);
+    col = mix(colA, colB, mixAmt);
+  } else {
+    // Steady state — single scene, no mix
+    col = renderScene(uv, zuv, sA);
   }
 
   // ============= OVERLAY LAYERS =============
@@ -2151,7 +2199,9 @@ let lastInteract = performance.now();
 let transitioning = false;
 let transitionT = 0;
 let transitionTo = 0;
-const TRANSITION_DURATION = 1.4;
+// Long enough to *see* the geometry morph. During 3D↔3D the shader
+// mixes SDFs directly, so this is how long shapes take to deform.
+const TRANSITION_DURATION = 3.5;
 
 function startTransition(toIdx){
   toIdx = ((toIdx % SCENES.length) + SCENES.length) % SCENES.length;
