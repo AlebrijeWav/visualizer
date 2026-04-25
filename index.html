@@ -783,10 +783,22 @@ vec3 raymarch3D(vec2 uv, int sA, int sB, float t){
   vec3 rd = normalize(vec3(uv, 1.5));
 
   // ---- USER ROTATION (drives the flight path) ----
-  ro.xz *= rot(uRotY);
-  rd.xz *= rot(uRotY);
-  ro.yz *= rot(uRotX);
-  rd.yz *= rot(uRotX);
+  // Tunnel constraint: when sIdx==6 is the dominant scene, dampen the
+  // user/auto-pilot rotation so the camera always keeps the tunnel
+  // opening centered. Small sway is preserved (rotScale ~0.18) so the
+  // view still feels alive. During a morph in/out of tunnel the
+  // damping interpolates with t so the constraint eases on/off.
+  float wTunnel = 0.0;
+  if(sA == 6) wTunnel += (1.0 - t);
+  if(sB == 6) wTunnel += t;
+  wTunnel = clamp(wTunnel, 0.0, 1.0);
+  float rotScale = mix(1.0, 0.18, wTunnel);
+  float urX = uRotX * rotScale;
+  float urY = uRotY * rotScale;
+  ro.xz *= rot(urY);
+  rd.xz *= rot(urY);
+  ro.yz *= rot(urX);
+  rd.yz *= rot(urX);
 
   // ===== CAMERA COLLISION =====
   // Push the camera back along its outward direction until it has clearance.
