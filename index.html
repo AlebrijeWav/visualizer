@@ -655,10 +655,12 @@ float mapBubbles(vec3 p){
 float mapTunnel(vec3 p){
   p.z += uFwd * 1.35;
 
-  // Lateral serpentine — bass widens the swing so the tunnel snakes harder
-  // during loud sections.
-  p.x += sin(p.z * 0.18 + uTime*0.20) * (0.28 + uBass*0.22);
-  p.y += cos(p.z * 0.15 + uTime*0.18) * (0.22 + uBass*0.18);
+  // Lateral serpentine — much gentler than before so the tunnel stays
+  // mostly straight from the camera's perspective. The opening at the
+  // far end remains visible instead of curving out of frame. Combined
+  // with camera-tracking in raymarch3D to keep the lens on the axis.
+  p.x += sin(p.z * 0.09 + uTime*0.20) * (0.08 + uBass*0.06);
+  p.y += cos(p.z * 0.07 + uTime*0.18) * (0.06 + uBass*0.04);
 
   // Twist — strong beat kick spins the walls past you faster
   float tw = p.z * 0.18 + uTime*0.25 + uBeatDecay*0.40;
@@ -799,6 +801,20 @@ vec3 raymarch3D(vec2 uv, int sA, int sB, float t){
   rd.xz *= rot(urY);
   ro.yz *= rot(urX);
   rd.yz *= rot(urX);
+
+  // ---- TUNNEL CAMERA TRACKING ----
+  // mapTunnel shifts p.xy by sin/cos of p.z (lateral serpentine) so the
+  // tube center isn't on the world z-axis. Slide the camera ro.xy onto
+  // that center so the lens always sits on the tube axis -- looking
+  // forward then sees down the opening, not into a wall. Mirror the
+  // exact formula used by mapTunnel and weight by the tunnel mix factor
+  // so this only kicks in for the tunnel scene.
+  if(wTunnel > 0.001){
+    float dispZ = ro.z + uFwd * 1.35;
+    float cx = -sin(dispZ * 0.09 + uTime*0.20) * (0.08 + uBass*0.06);
+    float cy = -cos(dispZ * 0.07 + uTime*0.18) * (0.06 + uBass*0.04);
+    ro.xy += vec2(cx, cy) * wTunnel;
+  }
 
   // ===== CAMERA COLLISION =====
   // Push the camera back along its outward direction until it has clearance.
@@ -1387,13 +1403,9 @@ vec3 layerGlyphs(vec2 uv){
 }
 
 vec3 layerIris(vec2 uv){
-  // Sparse lens grid with heavy morph + color variation:
-  //   - whole field rotates and swirls
-  //   - each lens picks 2 of 4 pattern types (rings, spokes, spiral,
-  //     rose petals) and continuously crossfades between them
-  //   - aspect ratio pulses each lens between circle and ellipse
-  //   - per-lens palette walker for live color cycling
-  //   - outer halo band in a complementary hue for extra depth
+  // Sparse lens grid — concentric rings only (other shapes were noisy).
+  // Motion comes from field rotation/swirl, per-lens spin, aspect pulse,
+  // palette walker, and an outer halo band in a complementary hue.
   float fieldAng = uTime * 0.08 + uBass * 0.3;
   vec2 sp = uv * rot(fieldAng);
 
@@ -1421,76 +1433,35 @@ vec3 layerIris(vec2 uv){
   // Per-lens spin
   q *= rot(uTime * (0.6 + h*1.2) + h * TAU);
 
-  // ASPECT PULSE — oscillate ellipse so lenses squash/stretch
+  // ASPECT PULSE — circle ↔ ellipse on a slow sine, per-lens phase
   float aspect = 1.0 + 0.45 * sin(uTime * 0.7 + h3 * TAU);
   q.x *= aspect;
   q.y /= aspect;
 
   float r = length(q);
-  float ang = atan(q.y, q.x);
 
-  // Per-lens type cycle: typeIdx walks 0..4 slowly, h3 staggers cells
-  // so neighbors aren't synchronised. typeMix is the crossfade between
-  // the integer pattern and the next one.
-  float typeIdx = mod(uTime*0.10 + h3*4.0, 4.0);
-  float t1f = floor(typeIdx);
-  float typeMix = typeIdx - t1f;
-  int t1 = int(t1f);
-  int t2 = int(mod(t1f + 1.0, 4.0));
-
-  // PATTERN 0 — concentric rings (the classic iris look)
+  // Concentric rings — frequency modulates over time so rings pulse
   float ringFreq = 16.0 + h*10.0 + 4.0 * sin(uTime*0.4 + h*TAU);
   float ringPhase = -uTime*(1.8 + uTreb*2.5) - h*TAU + uBeatDecay*6.0;
-  float pat0 = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(r * ringFreq + ringPhase));
-
-  // PATTERN 1 — radial spokes
-  float spokes = floor(4.0 + h*8.0);
-  float pat1 = smoothstep(0.86, 0.97, 0.5 + 0.5 * sin(ang * spokes + uTime*1.4));
-
-  // PATTERN 2 — spiral (rings + angle)
-  float pat2 = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(r * ringFreq + ang * 5.0 + ringPhase));
-
-  // PATTERN 3 — rose / petals
-  float petals = floor(3.0 + h*4.0);
-  float roseR  = abs(cos(ang * petals + uTime*0.5));
-  float pat3   = smoothstep(0.05, 0.0, abs(r - roseR*0.40));
-
-  // Select the two active patterns via weights (avoids dynamic indexing)
-  float w0_1 = (t1==0) ? 1.0 : 0.0;
-  float w1_1 = (t1==1) ? 1.0 : 0.0;
-  float w2_1 = (t1==2) ? 1.0 : 0.0;
-  float w3_1 = (t1==3) ? 1.0 : 0.0;
-  float w0_2 = (t2==0) ? 1.0 : 0.0;
-  float w1_2 = (t2==1) ? 1.0 : 0.0;
-  float w2_2 = (t2==2) ? 1.0 : 0.0;
-  float w3_2 = (t2==3) ? 1.0 : 0.0;
-  float patA = pat0*w0_1 + pat1*w1_1 + pat2*w2_1 + pat3*w3_1;
-  float patB = pat0*w0_2 + pat1*w1_2 + pat2*w2_2 + pat3*w3_2;
-  float pattern = mix(patA, patB, typeMix);
+  float ring = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(r * ringFreq + ringPhase));
 
   // Lens radius breathes
   float lensR = 0.38 + 0.06*sin(uTime*0.8 + h*TAU) + uMid*0.08 + uBeatDecay*0.06;
   float mask = smoothstep(lensR, lensR - 0.05, r);
 
-  // PALETTE WALKER — each lens cycles through the palette over time,
-  // with a per-cell phase offset so neighbors are different colors.
+  // PALETTE WALKER — each lens cycles hues over time, neighbors offset
   vec3 paletteCol = pal(uTime*0.13 + h*0.6 + r*0.4 + h3*0.3);
 
-  vec3 col = paletteCol * pattern * mask;
+  // Chromatic fringe — RGB-shifted ring contributions
+  float caOff = 0.005 + uBeatDecay*0.022 + uBass*0.006;
+  float ringR = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(length(q - vec2(caOff,0.0)) * ringFreq + ringPhase));
+  float ringB = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(length(q + vec2(caOff,0.0)) * ringFreq + ringPhase));
+  vec3 fringe = vec3(ringR, ring, ringB) * mask;
 
-  // Chromatic fringe — applied via a separate ring contribution so
-  // the pattern still has RGB separation on its edges, but only when
-  // the active pattern is ring-like (pat0 or pat2 weighted).
-  float ringWeight = (w0_1 + w2_1)*(1.0 - typeMix) + (w0_2 + w2_2)*typeMix;
-  if(ringWeight > 0.05){
-    float caOff = 0.005 + uBeatDecay*0.022 + uBass*0.006;
-    float ringR = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(length(q - vec2(caOff,0.0)) * ringFreq + ringPhase));
-    float ringB = smoothstep(0.82, 0.96, 0.5 + 0.5 * sin(length(q + vec2(caOff,0.0)) * ringFreq + ringPhase));
-    vec3 fringe = vec3(ringR, pat0, ringB) * mask;
-    col = mix(col, col + fringe * 0.45, ringWeight);
-  }
+  // Combine: palette tint as the dominant color, fringe added on edges
+  vec3 col = paletteCol * ring * mask + fringe * 0.45;
 
-  // OUTER HALO — soft band beyond the lens edge, complementary palette
+  // OUTER HALO — soft band beyond the lens edge in a complementary hue
   float haloOuter = lensR + 0.18;
   float haloBand = smoothstep(haloOuter, lensR + 0.02, r) * smoothstep(lensR, haloOuter, r);
   vec3 haloCol = pal(uTime*0.07 + h*0.4 + 0.45);
