@@ -9,6 +9,16 @@ import { levelFor, rankFor } from "./scoring.js";
 const app = express();
 app.use(express.json());
 
+// Permissive CORS for local dev so the static prototype (served on another
+// port / file origin) can call the API. Lock this down before any deploy.
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "content-type");
+  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(204);
+  next();
+});
+
 const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   if (err instanceof CheckinError) {
     return res.status(err.status).json({ error: err.code, message: err.message, ...err.extra });
@@ -86,11 +96,14 @@ app.get("/users/:handle", wrap(async (req, res) => {
      FROM checkin WHERE user_id=$1 AND verified`, [u.id])).rows[0];
   const badges = (await pool.query(
     `SELECT key FROM badge WHERE user_id=$1 ORDER BY earned_at`, [u.id])).rows.map((r) => r.key);
+  const seenArtists = (await pool.query(
+    `SELECT DISTINCT artist FROM checkin WHERE user_id=$1 AND verified AND artist IS NOT NULL`,
+    [u.id])).rows.map((r) => r.artist);
   res.json({
     handle: u.handle, crew: u.crew_id, xp: u.xp,
     level: levelFor(u.xp), rank: rankFor(u.xp),
     artists: Number(stats.artists), venues: Number(stats.venues), genres: Number(stats.genres),
-    badges,
+    seenArtists, badges,
   });
 }));
 

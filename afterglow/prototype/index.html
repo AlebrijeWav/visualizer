@@ -170,7 +170,7 @@ const CREWS = {
   warehouse: {name:"Warehouse Union",  short:"WHU", color:"#9DFF3D"},
 };
 const ME = "lowend";
-const GENRE = {house:"House", techno:"Techno", disco:"Disco", bass:"Bass"};
+const GENRE = {house:"House", techno:"Techno", disco:"Disco", bass:"Bass", dnb:"Drum & Bass"};
 
 // ---------------- venues + REAL upcoming lineups (verified June 2026) ----------------
 // events shape mirrors an Edmtrain/RA response so a live sync drops straight in.
@@ -222,10 +222,15 @@ const VENUES = [
     ]},
 ];
 
-// derived
-const ALL_ARTISTS = [...new Set(VENUES.flatMap(v=>v.events.flatMap(e=>e.artists.map(a=>a.name))))];
-const ARTIST_GENRE = {};
-VENUES.forEach(v=>v.events.forEach(e=>e.artists.forEach(a=>ARTIST_GENRE[a.name]=a.genre)));
+// derived (recomputed whenever VENUES is reloaded from the live API)
+let ALL_ARTISTS = [];
+let ARTIST_GENRE = {};
+function rebuildDerived(){
+  ALL_ARTISTS = [...new Set(VENUES.flatMap(v=>v.events.flatMap(e=>e.artists.map(a=>a.name))))];
+  ARTIST_GENRE = {};
+  VENUES.forEach(v=>v.events.forEach(e=>e.artists.forEach(a=>ARTIST_GENRE[a.name]=a.genre)));
+}
+rebuildDerived();
 
 // ---------------- WHERE THE LIVE FEED PLUGS IN ----------------
 // Server-side only — never expose the key in the client.
@@ -297,6 +302,92 @@ function resetProgress(){
 }
 loadState();
 
+// ---------------- LIVE API integration ----------------
+// The prototype runs standalone on the embedded snapshot. If the Phase 1 API
+// (afterglow/server) is reachable, it switches to LIVE mode: venues, control,
+// lineups, the passport and crew wars come from Postgres, and check-ins POST to
+// the server-authoritative endpoint (distance is re-verified server-side).
+// Override the base with ?api=URL or localStorage["afterglow.api"].
+const API = {
+  base: new URLSearchParams(location.search).get("api")
+        || localStorage.getItem("afterglow.api") || "http://localhost:8787",
+  live: false,
+};
+async function fetchJSON(path, opts={}){
+  const r = await fetch(API.base+path, opts);
+  const txt = await r.text();
+  let data=null; try{ data = txt ? JSON.parse(txt) : null; }catch(e){}
+  if(!r.ok){ const e=new Error((data&&data.message) || (r.status+" "+path)); e.data=data; throw e; }
+  return data;
+}
+function fmtDate(iso){
+  // API may return a date ("2026-07-10") or a full ISO timestamp; take the day
+  // part and pin to noon so the local-tz rendering can't slip a day.
+  const d = new Date(String(iso).slice(0,10)+"T12:00:00");
+  return isNaN(d) ? iso : d.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"});
+}
+// Map an API venue (control as array, ISO dates) to the in-app VENUES shape.
+function venueFromApi(d){
+  return { id:d.id, name:d.name, sub:d.alias||undefined, hood:d.hood, cap:d.cap,
+    lat:d.lat, lng:d.lng, radius:d.radius, fading:d.fading,
+    control:Object.fromEntries((d.control||[]).map(c=>[c.crew_id, Number(c.points)])),
+    mayor:d.mayor||null,
+    events:(d.events||[]).map(e=>({date:fmtDate(e.event_date), src:e.src, artists:e.artists})) };
+}
+async function initData(){
+  try{ await fetchJSON("/health"); }catch(e){ API.live=false; return; }
+  API.live=true;
+  const list = await fetchJSON("/venues");
+  const details = await Promise.all(list.map(x=>fetchJSON("/venues/"+x.id)));
+  VENUES.length=0; details.map(venueFromApi).forEach(v=>VENUES.push(v));
+  rebuildDerived();
+  await syncPassport();
+}
+async function refreshVenue(id){
+  const v=VENUES.find(x=>x.id===id); if(!v) return;
+  Object.assign(v, venueFromApi(await fetchJSON("/venues/"+id)));
+  rebuildDerived();
+}
+async function syncPassport(){
+  if(!API.live) return;
+  try{ const p=await fetchJSON("/users/you");
+    S.xp=p.xp; S.artists=new Set(p.seenArtists||[]); S.passport=p;
+  }catch(e){}
+}
+async function syncWars(){
+  if(!API.live) return;
+  try{ const rows=await fetchJSON("/wars");
+    S.crewWar={}; rows.forEach(r=>S.crewWar[r.id]=Math.round(Number(r.points)));
+  }catch(e){}
+}
+// Server-authoritative check-in. The server re-verifies distance and decides
+// XP/territory; we just render what it returns.
+async function claimLive(){
+  const v=VENUES.find(x=>x.id===S.checkin.venue);
+  const loc=effLoc();
+  if(!loc){ alert("Locate yourself first — use GPS or the demo jump."); return; }
+  let res;
+  try{
+    res = await fetchJSON("/checkin",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({handle:"you", venueId:v.id, artist:S.checkin.artist,
+        fullSet:S.checkin.fullSet, lat:loc.lat, lng:loc.lng})});
+  }catch(e){ alert(e.message || "Check-in failed"); return; }
+  S.xp=res.totalXp;
+  try{ await refreshVenue(v.id); }catch(e){}
+  await syncPassport();
+  drawMarkers(); updateHeader(); hideSheet();
+  showReward({ artist:res.artist, venue:res.venue.name,
+    lines:res.lines.map(l=>({l:l.label,p:l.points})), gained:res.xpGained,
+    flipped:res.flipped, earned:res.badges||[], share:res.share });
+}
+function updateLiveBadge(){
+  const el=document.querySelector("header .sync");
+  if(!el) return;
+  el.innerHTML = API.live
+    ? '<span style="color:var(--me)">●</span> LIVE API · POSTGIS · CHECK-INS PERSIST'
+    : '↻ OFFLINE SNAPSHOT · START THE SERVER FOR LIVE DATA';
+}
+
 // ---------------- map ----------------
 const map = L.map("map",{zoomControl:false, attributionControl:true}).setView([40.711,-73.935],12.5);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
@@ -367,7 +458,7 @@ function openVenue(id){
     <div class="card" style="margin-top:16px;display:flex;align-items:center;gap:10px">
       <span style="font-size:18px">${mine?'👑':'🪩'}</span>
       <div style="font-size:12px"><div class="eyebrow">VENUE MAYOR</div>
-      <div style="font-weight:700">${v.mayor==='you'?'You 👑':'@'+v.mayor}</div></div>
+      <div style="font-weight:700">${v.mayor==='you'?'You 👑':(v.mayor?'@'+v.mayor:'Unclaimed')}</div></div>
     </div>
     <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
       <span class="eyebrow">UPCOMING · LIVE FEED</span>
@@ -484,6 +575,7 @@ function setUserLoc(lat,lng,acc){
 }
 
 function claim(){
+  if(API.live){ claimLive(); return; }
   const v=VENUES.find(x=>x.id===S.checkin.venue);
   const ev=v.events[0], artist=S.checkin.artist, fullSet=S.checkin.fullSet;
   const genre=ARTIST_GENRE[artist];
@@ -559,6 +651,10 @@ function renderWhatsOn(){
 function renderPassport(){
   const lvl=levelFor(S.xp), next=LEVELS[lvl]||LEVELS[LEVELS.length-1], prev=LEVELS[lvl-1]||0;
   const pct=Math.min(100,Math.round((S.xp-prev)/(next-prev)*100)); const c=CREWS[ME].color;
+  // In live mode the passport stats + badges come from the server.
+  const P=(API.live && S.passport)?S.passport:null;
+  const aN=P?P.artists:S.artists.size, vN=P?P.venues:S.venues.size, gN=P?P.genres:S.genres.size;
+  const badgeList=P?(P.badges||[]):[...S.badges];
   document.getElementById("panelPassport").innerHTML=`
     <div style="padding-top:60px"></div>
     <div class="card" style="background:linear-gradient(135deg,${c}22,var(--ink2));border-color:${c}55">
@@ -574,7 +670,7 @@ function renderPassport(){
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-top:14px">
-      ${[["ARTISTS SEEN",S.artists.size],["VENUES",S.venues.size],["GENRES",S.genres.size]].map(([l,n])=>`
+      ${[["ARTISTS SEEN",aN],["VENUES",vN],["GENRES",gN]].map(([l,n])=>`
         <div class="card" style="flex:1;text-align:center;padding:12px 8px"><div class="h2" style="font-size:28px">${n}</div><div class="mono" style="font-size:8.5px;color:var(--dim);letter-spacing:1px;margin-top:4px">${l}</div></div>`).join("")}
     </div>
     <div class="eyebrow" style="margin:20px 0 10px">ARTIST COLLECTION</div>
@@ -584,12 +680,15 @@ function renderPassport(){
           <div style="font-weight:700;font-size:13px">${got?a:'???'}</div>
           <div class="mono" style="font-size:9px;color:var(--dim)">${got?GENRE[ARTIST_GENRE[a]].toUpperCase():'NOT SEEN LIVE'}</div></div>`;}).join("")}
     </div>
-    <div class="eyebrow" style="margin:20px 0 10px">BADGES · ${S.badges.size}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${[...S.badges].map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div>
+    <div class="eyebrow" style="margin:20px 0 10px">BADGES · ${badgeList.length}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${badgeList.map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div>
     <button class="btn sub" style="margin-top:26px" onclick="resetProgress()">↺ Reset progress (this device)</button>`;
 }
 function renderWars(){
-  const ranked=Object.entries(S.city).sort((a,b)=>b[1]-a[1]); const max=ranked[0][1];
+  // Crew leaderboard = live control totals when available; city-vs-city stays a
+  // mocked flourish (no backend for it yet).
+  const warData=(API.live && S.crewWar)?S.crewWar:S.city;
+  const ranked=Object.entries(warData).sort((a,b)=>b[1]-a[1]); const max=ranked[0][1]||1;
   const cities=[{n:"New York",p:Object.values(S.city).reduce((a,b)=>a+b,0),c:CREWS[ME].color,you:1},
     {n:"Chicago",p:19140,c:"#FF3D81"},{n:"Denver",p:17880,c:"#9DFF3D"},{n:"Detroit",p:16320,c:"#FFB627"}].sort((a,b)=>b.p-a.p);
   const cmax=cities[0].p;
@@ -626,8 +725,8 @@ function setTab(t){
   hideSheet();
   if(t==="map"){ map.invalidateSize(); return; }
   if(t==="whatson"){ renderWhatsOn(); document.getElementById("panelWhatsOn").classList.add("open"); }
-  if(t==="passport"){ renderPassport(); document.getElementById("panelPassport").classList.add("open"); }
-  if(t==="wars"){ renderWars(); document.getElementById("panelWars").classList.add("open"); }
+  if(t==="passport"){ document.getElementById("panelPassport").classList.add("open"); renderPassport(); syncPassport().then(renderPassport); }
+  if(t==="wars"){ document.getElementById("panelWars").classList.add("open"); renderWars(); syncWars().then(renderWars); }
 }
 document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
 document.getElementById("fabLocate").addEventListener("click",()=>{
@@ -639,6 +738,12 @@ document.getElementById("fabLocate").addEventListener("click",()=>{
 });
 
 updateHeader();
+
+// Boot: try the live API, fall back to the embedded snapshot. Redraw once we
+// know which mode we're in.
+initData()
+  .then(()=>{ if(API.live) drawMarkers(); updateHeader(); updateLiveBadge(); })
+  .catch(()=>updateLiveBadge());
 </script>
 </body>
 </html>
