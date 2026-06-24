@@ -13,11 +13,13 @@
 - [ ] Choose the seed scene (recommended: the 6 Brooklyn/Queens venues here)
 
 ## Phase 1: real backend
-- [ ] Postgres + PostGIS schema: users, crews, venues, events, checkins, control_ledger
-- [ ] Auth + accounts; crew membership
-- [ ] Sync worker: pull Edmtrain/RA -> normalize to `events` shape -> upsert (honor 24h cache)
-- [ ] Server-authoritative check-in endpoint: recompute Haversine, award XP, update control ledger
-- [ ] Territory decay job (scheduled control-point decay per venue)
+Scaffolded and verified end-to-end against PostGIS in `server/` (see `server/README.md`).
+- [x] Postgres + PostGIS schema: users, crews, venues, events, checkins, control_ledger (`server/db/schema.sql`)
+- [ ] Auth + accounts; crew membership (currently handle-based; real auth still TODO)
+- [x] Sync worker: pull feed -> normalize to `events` shape -> upsert, drop past events, honor 24h cache (`server/src/sync.js`; snapshot fallback until `EDMTRAIN_CLIENT_KEY` set)
+- [x] Server-authoritative check-in endpoint: recompute distance in PostGIS, gate on geofence, award XP, update control ledger + badges + flip detection (`server/src/checkin.js`)
+- [x] Territory decay job (scheduled control-point decay + fading per venue) (`server/src/decay.js`)
+- [ ] Real `event_date` semantics beyond the snapshot; genre mapping table (`docs/DATA-SOURCES.md`)
 
 ## Phase 2: the app
 - [ ] Port prototype UI to the chosen client; wire to the API

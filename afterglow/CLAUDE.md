@@ -55,6 +55,9 @@ distance will correctly refuse check-in — use "Jump to venue (demo)" to exerci
 ## Architecture
 
 **Now:** single HTML file, Leaflet, CARTO tiles, hardcoded data, all client-side.
+A Phase 1 backend is scaffolded and verified end-to-end against PostGIS in `server/`
+(Express API + server-authoritative check-in + sync/decay workers — see `server/README.md`).
+The prototype still runs standalone; wiring it to the API is Phase 2.
 
 **Planned (not yet chosen — decide early):**
 - Client: mobile-first. Strong options: React Native / Expo (native geofencing in background)
