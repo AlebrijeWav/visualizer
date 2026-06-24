@@ -23,11 +23,14 @@ backend. What works today:
 - Real interactive map (Leaflet + CARTO dark tiles) with 6 real NYC venues plotted by lat/lng
 - Venues colored by the crew that controls them; tap for a territory breakdown + mayor
 - **Real GPS** (`navigator.geolocation.watchPosition`) with a Haversine geofence gate on check-in;
-  geofence circle drawn to scale on the map; "Jump to venue (demo)" to test on-site
+  the geofence distance + inside/outside state update **live** while the sheet is open; geofence
+  circle drawn to scale on the map; "Jump to venue (demo)" to test on-site
 - Check-in flow → XP with bonuses (new artist/venue/genre, full-set dwell) → territory shift →
   "TERRITORY FLIPPED" when your crew takes the lead → badges
 - Passport (level, XP, artist collection, badges), Crew Wars + City-vs-City leaderboards
 - Verified upcoming lineups per venue, shaped like a live API response
+- **Progress persists** across reloads (localStorage: XP, collection, badges, venue control
+  ledger); Passport has a "Reset progress" button for clean demos
 
 ## How to run
 

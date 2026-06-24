@@ -262,6 +262,41 @@ const S = {
   city:{sundown:4820, afterhours:4310, lowend:3990, warehouse:3510, bassline:3120},
 };
 
+// ---------------- persistence (localStorage) ----------------
+// A check-in game has to remember you across sessions. We persist player
+// progress + the venue control ledger; everything else is derived on load.
+const SAVE_KEY = "afterglow.save.v1";
+function saveState(){
+  try{
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      xp:S.xp,
+      artists:[...S.artists], venues:[...S.venues], genres:[...S.genres], badges:[...S.badges],
+      city:S.city,
+      control:Object.fromEntries(VENUES.map(v=>[v.id,{control:v.control,mayor:v.mayor,fading:v.fading}])),
+    }));
+  }catch(e){ /* private mode / quota — fail soft, stay in-memory */ }
+}
+function loadState(){
+  try{
+    const raw=localStorage.getItem(SAVE_KEY); if(!raw) return;
+    const d=JSON.parse(raw);
+    if(typeof d.xp==="number") S.xp=d.xp;
+    if(d.artists) S.artists=new Set(d.artists);
+    if(d.venues)  S.venues =new Set(d.venues);
+    if(d.genres)  S.genres =new Set(d.genres);
+    if(d.badges)  S.badges =new Set(d.badges);
+    if(d.city)    S.city   =d.city;
+    if(d.control) VENUES.forEach(v=>{ const c=d.control[v.id];
+      if(c){ v.control=c.control; v.mayor=c.mayor; v.fading=c.fading; } });
+  }catch(e){ /* corrupt save — ignore and start fresh */ }
+}
+function resetProgress(){
+  if(!confirm("Reset all Afterglow progress on this device?")) return;
+  try{ localStorage.removeItem(SAVE_KEY); }catch(e){}
+  location.reload();
+}
+loadState();
+
 // ---------------- map ----------------
 const map = L.map("map",{zoomControl:false, attributionControl:true}).setView([40.711,-73.935],12.5);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
@@ -303,7 +338,7 @@ function genresOf(ev){ return [...new Set(ev.artists.map(a=>GENRE[a.genre]))].jo
 // ---------------- venue sheet ----------------
 const scrim=document.getElementById("scrim"), sheet=document.getElementById("sheet"), sheetBody=document.getElementById("sheetBody");
 function showSheet(html){ sheetBody.innerHTML=html; sheet.classList.add("open"); scrim.classList.add("open"); }
-function hideSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); clearGeofence(); S.checkin=null; }
+function hideSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); clearGeofence(); stopWatch(); S.checkin=null; }
 scrim.addEventListener("click",hideSheet);
 
 function openVenue(id){
@@ -357,6 +392,7 @@ function startCheckin(id){
   S.checkin={venue:id, artist:v.events[0].artists[0].name, fullSet:true};
   map.flyTo([v.lat,v.lng],16,{duration:.6});
   drawGeofence(v);
+  startWatch();
   renderCheckin();
 }
 function drawGeofence(v){
@@ -429,6 +465,16 @@ function useGPS(){
     {enableHighAccuracy:true, timeout:9000, maximumAge:0}
   );
 }
+// Live geofence: track the device while the check-in sheet is open so the
+// distance + inside/outside state update in real time as you walk up.
+function startWatch(){
+  if(!navigator.geolocation || S.watchId!=null) return;
+  S.watchId=navigator.geolocation.watchPosition(
+    pos=>{ setUserLoc(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy);
+           if(S.checkin && !S.simLoc) renderCheckin(); },
+    ()=>{}, {enableHighAccuracy:true, maximumAge:2000, timeout:12000});
+}
+function stopWatch(){ if(S.watchId!=null){ navigator.geolocation.clearWatch(S.watchId); S.watchId=null; } }
 function setUserLoc(lat,lng,acc){
   S.userLoc={lat,lng};
   if(youMarker) map.removeLayer(youMarker);
@@ -463,6 +509,7 @@ function claim(){
   S.xp+=gained; S.artists.add(artist); S.venues.add(v.id); S.genres.add(genre);
   earned.forEach(b=>S.badges.add(b)); S.city[ME]+=gained;
 
+  saveState();
   drawMarkers(); updateHeader(); hideSheet();
   showReward({artist, venue:v.name, lines, gained, flipped, earned, share:shareOf(v.control,ME)});
 }
@@ -538,7 +585,8 @@ function renderPassport(){
           <div class="mono" style="font-size:9px;color:var(--dim)">${got?GENRE[ARTIST_GENRE[a]].toUpperCase():'NOT SEEN LIVE'}</div></div>`;}).join("")}
     </div>
     <div class="eyebrow" style="margin:20px 0 10px">BADGES · ${S.badges.size}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${[...S.badges].map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${[...S.badges].map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div>
+    <button class="btn sub" style="margin-top:26px" onclick="resetProgress()">↺ Reset progress (this device)</button>`;
 }
 function renderWars(){
   const ranked=Object.entries(S.city).sort((a,b)=>b[1]-a[1]); const max=ranked[0][1];
