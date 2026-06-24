@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Afterglow — NYC territory control</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Anton&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root{
+    --ink:#0B0A14; --ink2:#15131F; --ink3:#1F1B2E; --line:#2A2540;
+    --text:#ECEAF5; --dim:#8C84A8;
+    --me:#16E0C8;
+    --display:'Anton','Arial Narrow',sans-serif;
+    --body:'Space Grotesk',system-ui,sans-serif;
+    --mono:'Space Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--ink);color:var(--text);font-family:var(--body);overflow:hidden}
+  #app{max-width:460px;margin:0 auto;height:100dvh;position:relative;border-left:1px solid var(--line);border-right:1px solid var(--line);overflow:hidden}
+  #map{position:absolute;inset:0;background:var(--ink)}
+  .leaflet-container{background:#0B0A14;font-family:var(--mono)}
+  .leaflet-control-attribution{background:rgba(11,10,20,.6)!important;color:#5b5474!important;font-size:8px!important}
+  .leaflet-control-attribution a{color:#7a7298!important}
+
+  /* top header */
+  header{position:absolute;top:0;left:0;right:0;z-index:600;padding:14px 16px;
+    background:linear-gradient(180deg,rgba(11,10,20,.95),rgba(11,10,20,0));pointer-events:none}
+  .h-row{display:flex;justify-content:space-between;align-items:flex-start}
+  .h-loc{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--dim)}
+  .h-city{font-family:var(--display);font-size:28px;line-height:1;letter-spacing:.5px;margin-top:2px}
+  .crewchip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;
+    border:1px solid var(--me);color:var(--me);font-size:11px;font-weight:700;pointer-events:auto}
+  .crewchip .led{width:7px;height:7px;border-radius:9px;background:var(--me);box-shadow:0 0 8px var(--me)}
+  .h-lvl{font-family:var(--mono);font-size:10px;color:var(--dim);margin-top:5px;text-align:right}
+  .sync{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:9px;color:var(--dim);
+    margin-top:8px;letter-spacing:.5px;background:rgba(21,19,31,.7);padding:4px 8px;border-radius:999px;pointer-events:auto}
+
+  /* venue markers */
+  .vmark{position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer}
+  .vmark .dot{width:var(--sz);height:var(--sz);border-radius:999px;background:var(--c);
+    box-shadow:0 0 14px var(--c);border:2px solid rgba(255,255,255,.18);position:relative}
+  .vmark .ring{position:absolute;top:0;left:50%;transform:translateX(-50%);width:calc(var(--sz) + 12px);height:calc(var(--sz) + 12px);
+    margin-top:-6px;border-radius:999px;border:1.5px solid var(--c);opacity:.7;animation:pulse 2.4s infinite}
+  .vmark.fading .ring{animation:shimmer 1.6s infinite;opacity:.4}
+  .vmark .crown{position:absolute;top:0;left:0;width:100%;height:var(--sz);display:flex;align-items:center;justify-content:center;
+    font-size:calc(var(--sz) * .55);line-height:1}
+  .vmark .vlabel{margin-top:5px;font-size:10px;font-weight:700;white-space:nowrap;color:#fff;text-shadow:0 1px 4px #000,0 0 8px #000}
+  .vmark .vfade{font-family:var(--mono);font-size:8px;color:var(--dim)}
+  @keyframes pulse{0%,100%{transform:translateX(-50%) scale(1);opacity:.7}50%{transform:translateX(-50%) scale(1.15);opacity:1}}
+  @keyframes shimmer{0%,100%{opacity:.25}50%{opacity:.7}}
+  .you{width:16px;height:16px;border-radius:999px;background:#fff;border:3px solid var(--ink);box-shadow:0 0 0 3px var(--me),0 0 14px var(--me)}
+  .you-pulse{animation: youp 1.8s infinite}
+  @keyframes youp{0%{box-shadow:0 0 0 3px var(--me),0 0 0 0 rgba(22,224,200,.5)}70%{box-shadow:0 0 0 3px var(--me),0 0 0 18px rgba(22,224,200,0)}100%{box-shadow:0 0 0 3px var(--me),0 0 0 0 rgba(22,224,200,0)}}
+
+  /* floating buttons */
+  .fab{position:absolute;right:14px;z-index:560;width:46px;height:46px;border-radius:14px;border:1px solid var(--line);
+    background:rgba(21,19,31,.92);color:var(--text);display:flex;align-items:center;justify-content:center;cursor:pointer;backdrop-filter:blur(8px)}
+  #fabLocate{bottom:150px}
+  .fab svg{width:20px;height:20px}
+
+  /* sheets / panels */
+  .scrim{position:absolute;inset:0;z-index:700;background:rgba(8,7,16,.55);backdrop-filter:blur(2px);
+    opacity:0;pointer-events:none;transition:opacity .2s}
+  .scrim.open{opacity:1;pointer-events:auto}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:710;max-height:90dvh;overflow-y:auto;
+    background:var(--ink2);border-top:1px solid var(--line);border-radius:22px 22px 0 0;padding:18px 18px 28px;
+    transform:translateY(100%);transition:transform .28s ease}
+  .sheet.open{transform:translateY(0)}
+  .grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 14px}
+  .panel{position:absolute;inset:0;z-index:650;background:var(--ink);overflow-y:auto;padding:0 16px 96px;
+    transform:translateY(8px);opacity:0;pointer-events:none;transition:opacity .2s, transform .2s}
+  .panel.open{opacity:1;transform:translateY(0);pointer-events:auto}
+
+  /* bottom nav */
+  nav{position:absolute;bottom:0;left:0;right:0;z-index:800;display:flex;
+    background:rgba(11,10,20,.94);border-top:1px solid var(--line);backdrop-filter:blur(10px);
+    padding:8px 8px calc(8px + env(safe-area-inset-bottom))}
+  nav button{flex:1;background:none;border:none;color:var(--dim);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 0;font-family:var(--body)}
+  nav button.active{color:var(--me)}
+  nav button .lab{font-size:10px;font-weight:600}
+  nav svg{width:20px;height:20px}
+
+  /* bits */
+  .mono{font-family:var(--mono)}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--dim)}
+  .h2{font-family:var(--display);font-size:26px;line-height:1.05}
+  .ctrlbar{display:flex;height:13px;border-radius:6px;overflow:hidden;background:var(--ink3)}
+  .ctrlbar span{display:block;height:100%}
+  .row{display:flex;align-items:center;gap:8px;font-size:12px}
+  .btn{width:100%;padding:14px;border-radius:14px;border:none;background:var(--me);color:var(--ink);
+    font-weight:700;font-size:15px;font-family:var(--body);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:18px}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn.ghost{background:transparent;border:1px solid var(--me);color:var(--me)}
+  .btn.sub{background:var(--ink3);border:1px solid var(--line);color:var(--text);font-size:13px;padding:10px;margin-top:10px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--ink2)}
+  .card{background:var(--ink2);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .eventrow{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--ink2);margin-bottom:7px}
+  .lock{opacity:.4;pointer-events:none;transition:opacity .2s}
+  .opt{text-align:left;width:100%;padding:12px 14px;border-radius:12px;background:var(--ink2);border:1px solid var(--line);color:var(--text);cursor:pointer;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:var(--body);font-size:13px}
+  .opt.on{background:var(--ink3);border-color:var(--me)}
+  /* radar */
+  .radar{height:120px;display:flex;align-items:center;justify-content:center;position:relative}
+  .radar .geo{position:absolute;width:104px;height:104px;border-radius:999px;border:1px dashed var(--line)}
+  .radar .ping{position:absolute;width:56px;height:56px;border-radius:999px;border:1.5px solid var(--me);animation:ping 2s infinite}
+  @keyframes ping{0%{transform:scale(.5);opacity:.8}100%{transform:scale(1.9);opacity:0}}
+  .radar .venuept{position:absolute;width:14px;height:14px;border-radius:999px;background:var(--me);box-shadow:0 0 12px var(--me)}
+  .radar .youpt{position:absolute;width:10px;height:10px;border-radius:999px;background:#fff;border:2px solid var(--ink)}
+  input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:4px;background:var(--ink3);outline:none}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid var(--ink);cursor:pointer}
+  /* reward */
+  #reward{position:absolute;inset:0;z-index:900;display:none;align-items:center;justify-content:center;padding:20px;
+    background:rgba(8,7,16,.82);backdrop-filter:blur(3px)}
+  #reward .box{width:100%;max-width:360px;background:var(--ink2);border:1px solid var(--me);border-radius:22px;padding:24px;
+    box-shadow:0 0 50px rgba(22,224,200,.25);animation:pop .4s ease}
+  @keyframes pop{0%{transform:scale(.85);opacity:0}60%{transform:scale(1.04)}100%{transform:scale(1);opacity:1}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="map"></div>
+
+  <header>
+    <div class="h-row">
+      <div>
+        <div class="h-loc">● LIVE · NEW YORK CITY</div>
+        <div class="h-city">TERRITORY</div>
+        <div class="sync"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></svg> SYNCED FROM EDMTRAIN + RA · 2H AGO</div>
+      </div>
+      <div style="text-align:right">
+        <div class="crewchip"><span class="led"></span> Low End Theory</div>
+        <div class="h-lvl" id="hLvl">LVL 4 · Headliner</div>
+      </div>
+    </div>
+  </header>
+
+  <div class="fab" id="fabLocate" title="Find me">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8"/></svg>
+  </div>
+
+  <!-- list / passport / wars panels -->
+  <div class="panel" id="panelWhatsOn"></div>
+  <div class="panel" id="panelPassport"></div>
+  <div class="panel" id="panelWars"></div>
+
+  <!-- bottom sheet (venue + checkin) -->
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"><div class="grab"></div><div id="sheetBody"></div></div>
+
+  <!-- reward -->
+  <div id="reward"><div class="box" id="rewardBox"></div></div>
+
+  <nav>
+    <button data-tab="map" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 20l-6 2V6l6-2 6 2 6-2v16l-6 2-6-2z"/><path d="M9 4v16M15 6v16"/></svg><span class="lab">Map</span></button>
+    <button data-tab="whatson"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8a6 6 0 0 1 0 8.4M7.8 16.2a6 6 0 0 1 0-8.4M19 5a10 10 0 0 1 0 14M5 19A10 10 0 0 1 5 5"/></svg><span class="lab">What's On</span></button>
+    <button data-tab="passport"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span class="lab">Passport</span></button>
+    <button data-tab="wars"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M6 4h12v5a6 6 0 0 1-12 0z"/><path d="M9 19h6M10 22h4M12 15v4"/></svg><span class="lab">Wars</span></button>
+  </nav>
+</div>
+
+<script>
+// ---------------- crews ----------------
+const CREWS = {
+  lowend:    {name:"Low End Theory",   short:"LET", color:"#16E0C8"},
+  sundown:   {name:"Sundown Society",  short:"SDS", color:"#FF3D81"},
+  afterhours:{name:"After Hours Club", short:"AHC", color:"#B388FF"},
+  bassline:  {name:"Bassline Brigade", short:"BSL", color:"#FFB627"},
+  warehouse: {name:"Warehouse Union",  short:"WHU", color:"#9DFF3D"},
+};
+const ME = "lowend";
+const GENRE = {house:"House", techno:"Techno", disco:"Disco", bass:"Bass"};
+
+// ---------------- venues + REAL upcoming lineups (verified June 2026) ----------------
+// events shape mirrors an Edmtrain/RA response so a live sync drops straight in.
+const VENUES = [
+  { id:"pacha", name:"Pacha New York", sub:"fka Brooklyn Mirage", hood:"East Williamsburg", cap:"outdoor",
+    lat:40.7128, lng:-73.9335, radius:160, fading:false,
+    control:{sundown:41, lowend:22, afterhours:19, bassline:18}, mayor:"rave_orbit",
+    events:[
+      {date:"Fri Jun 26", src:"ra.co", artists:[{name:"Michael Bibi", genre:"house"}]},
+      {date:"Sat Jun 27", src:"ra.co", artists:[{name:"Loud Luxury", genre:"house"},{name:"Erik Vilar", genre:"house"}]},
+      {date:"Fri Jul 3",  src:"ra.co", artists:[{name:"Black Coffee", genre:"house"}]},
+    ]},
+  { id:"knockdown", name:"Knockdown Center", hood:"Maspeth, Queens", cap:"warehouse",
+    lat:40.7117, lng:-73.9215, radius:130, fading:false,
+    control:{warehouse:38, afterhours:27, lowend:20, sundown:15}, mayor:"concrete_kid",
+    events:[
+      {date:"Sat Jun 27", src:"ra.co", artists:[{name:"Gabrielle Kwarteng", genre:"house"},{name:"isabella", genre:"house"}]},
+      {date:"Sat Jul 18", src:"ra.co", artists:[{name:"Dixon", genre:"techno"},{name:"Jimi Jules", genre:"techno"},{name:"Trikk", genre:"techno"}]},
+      {date:"Fri Aug 7",  src:"ra.co", artists:[{name:"Charlotte de Witte", genre:"techno"}]},
+    ]},
+  { id:"elsewhere", name:"Elsewhere", hood:"Bushwick", cap:"club",
+    lat:40.7069, lng:-73.9231, radius:90, fading:false,
+    control:{lowend:35, sundown:30, bassline:20, afterhours:15}, mayor:"you",
+    events:[
+      {date:"Fri Jul 10", src:"dice.fm", artists:[{name:"Eli Escobar", genre:"disco"}]},
+      {date:"Sat Jul 18", src:"dice.fm", artists:[{name:"Young Franco", genre:"house"}]},
+      {date:"Fri Jul 24", src:"dice.fm", artists:[{name:"Recondite", genre:"techno"},{name:"Kanykei", genre:"techno"},{name:"YokoO", genre:"house"}]},
+    ]},
+  { id:"nowadays", name:"Nowadays", hood:"Ridgewood", cap:"outdoor",
+    lat:40.7095, lng:-73.9085, radius:120, fading:false,
+    control:{afterhours:44, lowend:24, warehouse:18, sundown:14}, mayor:"sunday_service",
+    events:[
+      {date:"Sun Jun 28", src:"ra.co", artists:[{name:"Mister Sunday", genre:"disco"}]},
+      {date:"Sat Jul 4",  src:"ra.co", artists:[{name:"Underground Resistance", genre:"techno"},{name:"Shinedoe", genre:"techno"},{name:"Shyboi", genre:"techno"}]},
+    ]},
+  { id:"publicrec", name:"Public Records", hood:"Gowanus", cap:"hi-fi club",
+    lat:40.6800, lng:-73.9860, radius:70, fading:false,
+    control:{bassline:40, lowend:33, afterhours:27}, mayor:"low_theory",
+    events:[
+      {date:"Sat Jul 4", src:"dice.fm", artists:[{name:"Soul Summit", genre:"house"},{name:"Shelter", genre:"house"}]},
+      {date:"Sun Jul 5", src:"dice.fm", artists:[{name:"Louie Vega", genre:"house"}]},
+    ]},
+  { id:"goodroom", name:"Good Room", hood:"Greenpoint", cap:"club", fading:true,
+    lat:40.7300, lng:-73.9505, radius:80,
+    control:{lowend:47, bassline:28, sundown:25}, mayor:"you",
+    events:[
+      {date:"Fri Jun 26", src:"ra.co", artists:[{name:"Kapote", genre:"disco"},{name:"Barbara Boeing", genre:"disco"}]},
+      {date:"Sat Jul 11", src:"ra.co", artists:[{name:"Bookworms", genre:"techno"}]},
+    ]},
+];
+
+// derived
+const ALL_ARTISTS = [...new Set(VENUES.flatMap(v=>v.events.flatMap(e=>e.artists.map(a=>a.name))))];
+const ARTIST_GENRE = {};
+VENUES.forEach(v=>v.events.forEach(e=>e.artists.forEach(a=>ARTIST_GENRE[a.name]=a.genre)));
+
+// ---------------- WHERE THE LIVE FEED PLUGS IN ----------------
+// Server-side only — never expose the key in the client.
+// Edmtrain:  GET https://edmtrain.com/api/events?venueIds={id}&client={KEY}
+// RA (unofficial GraphQL): POST https://ra.co/graphql  { eventListings(filters:{venue:{id}}){ lineup date contentUrl } }
+async function syncVenueEvents(id){
+  await new Promise(r=>setTimeout(r,650));            // demo latency
+  return VENUES.find(v=>v.id===id).events;            // real call returns this same shape
+}
+
+// ---------------- helpers ----------------
+const total = c => Object.values(c).reduce((a,b)=>a+b,0);
+const leaderOf = c => Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0];
+const shareOf = (c,k)=>Math.round(((c[k]||0)/total(c))*100);
+const sortedShares = c => Object.entries(c).sort((a,b)=>b[1]-a[1]);
+function haversine(a,b){ const R=6371000, r=x=>x*Math.PI/180;
+  const dLat=r(b.lat-a.lat), dLng=r(b.lng-a.lng);
+  const s=Math.sin(dLat/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+  return Math.round(2*R*Math.asin(Math.sqrt(s))); }
+
+const LEVELS=[0,200,500,900,1500,2400,3600];
+const RANKS=["Newcomer","Regular","Resident","Headliner","Local Legend","Nightmayor","Citywide Icon"];
+const levelFor=xp=>{let l=1;for(let i=0;i<LEVELS.length;i++)if(xp>=LEVELS[i])l=i+1;return l;};
+
+// ---------------- state ----------------
+const S = {
+  tab:"map", checkin:null, selected:null,
+  userLoc:null, simLoc:null, watchId:null,
+  xp:640,
+  artists:new Set(["Loud Luxury","Mister Sunday"]),
+  venues:new Set(["elsewhere","goodroom"]),
+  genres:new Set(["house","disco"]),
+  badges:new Set(["First Light","Greenpoint Mayor"]),
+  city:{sundown:4820, afterhours:4310, lowend:3990, warehouse:3510, bassline:3120},
+};
+
+// ---------------- map ----------------
+const map = L.map("map",{zoomControl:false, attributionControl:true}).setView([40.711,-73.935],12.5);
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{
+  subdomains:"abcd", maxZoom:20,
+  attribution:'&copy; OpenStreetMap &copy; CARTO'
+}).addTo(map);
+
+const markers = {};
+let geoCircle=null, youMarker=null, youAccuracy=null;
+
+function markerHTML(v){
+  const lead=leaderOf(v.control), c=CREWS[lead].color, mine=lead===ME;
+  const sz=14+Math.min(20, total(v.control)/6);
+  return `<div class="vmark ${v.fading?'fading':''}" style="--c:${c};--sz:${sz}px">
+      <div class="ring"></div><div class="dot"></div>
+      ${mine?'<div class="crown">👑</div>':''}
+      <div class="vlabel">${v.name}</div>
+      ${v.fading?'<div class="vfade">FADING ▾</div>':''}
+    </div>`;
+}
+function drawMarkers(){
+  VENUES.forEach(v=>{
+    if(markers[v.id]) map.removeLayer(markers[v.id]);
+    const icon=L.divIcon({className:"", html:markerHTML(v), iconSize:[80,52], iconAnchor:[40,20]});
+    const m=L.marker([v.lat,v.lng],{icon}).addTo(map);
+    m.on("click",()=>openVenue(v.id));
+    markers[v.id]=m;
+  });
+}
+drawMarkers();
+
+// ---------------- rendering helpers ----------------
+function ctrlbar(c){ const t=total(c);
+  return `<div class="ctrlbar">`+sortedShares(c).map(([k,p])=>
+    `<span style="width:${(p/t)*100}%;background:${CREWS[k].color};opacity:${k===ME?1:.7}"></span>`).join("")+`</div>`; }
+
+function genresOf(ev){ return [...new Set(ev.artists.map(a=>GENRE[a.genre]))].join("/"); }
+
+// ---------------- venue sheet ----------------
+const scrim=document.getElementById("scrim"), sheet=document.getElementById("sheet"), sheetBody=document.getElementById("sheetBody");
+function showSheet(html){ sheetBody.innerHTML=html; sheet.classList.add("open"); scrim.classList.add("open"); }
+function hideSheet(){ sheet.classList.remove("open"); scrim.classList.remove("open"); clearGeofence(); S.checkin=null; }
+scrim.addEventListener("click",hideSheet);
+
+function openVenue(id){
+  const v=VENUES.find(x=>x.id===id); S.selected=id;
+  const lead=leaderOf(v.control), mine=lead===ME;
+  showSheet(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="eyebrow">📍 ${v.hood} · ${v.cap}</div>
+        <div class="h2" style="margin-top:4px">${v.name}</div>
+        ${v.sub?`<div style="font-size:11px;color:var(--dim);margin-top:2px">${v.sub}</div>`:""}
+      </div>
+      <button class="pill" onclick="hideSheet()" style="cursor:pointer">✕</button>
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:space-between;margin-bottom:8px">
+      <span class="eyebrow">TERRITORY CONTROL</span>
+      <span style="font-size:11px;font-weight:700;color:${CREWS[lead].color}">${CREWS[lead].name} · ${shareOf(v.control,lead)}%</span>
+    </div>
+    ${ctrlbar(v.control)}
+    <div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">
+      ${sortedShares(v.control).map(([k])=>`<div class="row">
+        <span style="width:9px;height:9px;border-radius:9px;background:${CREWS[k].color}"></span>
+        <span style="flex:1;color:${k===ME?'var(--text)':'var(--dim)'};font-weight:${k===ME?700:500}">${CREWS[k].name}${k===ME?' (you)':''}</span>
+        <span class="mono" style="color:var(--dim)">${shareOf(v.control,k)}%</span></div>`).join("")}
+    </div>
+    <div class="card" style="margin-top:16px;display:flex;align-items:center;gap:10px">
+      <span style="font-size:18px">${mine?'👑':'🪩'}</span>
+      <div style="font-size:12px"><div class="eyebrow">VENUE MAYOR</div>
+      <div style="font-weight:700">${v.mayor==='you'?'You 👑':'@'+v.mayor}</div></div>
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center">
+      <span class="eyebrow">UPCOMING · LIVE FEED</span>
+      <button class="pill" style="cursor:pointer;color:var(--me);border-color:var(--me)" onclick="resync('${v.id}',this)">↻ Re-sync</button>
+    </div>
+    <div id="evlist" style="margin-top:8px">${v.events.map(eventRow).join("")}</div>
+    <button class="btn" onclick="startCheckin('${v.id}')">◎ Check in here</button>
+  `);
+}
+function eventRow(e){
+  return `<div class="eventrow"><div>
+    <div style="font-weight:700;font-size:13px">${e.artists.map(a=>a.name).join(" · ")}</div>
+    <div class="mono" style="font-size:9.5px;color:var(--dim);margin-top:2px">${e.date.toUpperCase()} · ${genresOf(e).toUpperCase()} · via ${e.src}</div>
+    </div><span style="color:var(--dim)">♫</span></div>`;
+}
+async function resync(id,btn){ btn.textContent="↻ Syncing"; const ev=await syncVenueEvents(id);
+  document.getElementById("evlist").innerHTML=ev.map(eventRow).join(""); btn.textContent="↻ Re-sync"; }
+
+// ---------------- check-in with geofence ----------------
+function startCheckin(id){
+  const v=VENUES.find(x=>x.id===id);
+  S.checkin={venue:id, artist:v.events[0].artists[0].name, fullSet:true};
+  map.flyTo([v.lat,v.lng],16,{duration:.6});
+  drawGeofence(v);
+  renderCheckin();
+}
+function drawGeofence(v){
+  clearGeofence();
+  geoCircle=L.circle([v.lat,v.lng],{radius:v.radius, color:CREWS[ME].color, weight:1.5, dashArray:"5 5",
+    fillColor:CREWS[ME].color, fillOpacity:.08}).addTo(map);
+}
+function clearGeofence(){ if(geoCircle){map.removeLayer(geoCircle);geoCircle=null;} }
+
+function effLoc(){ return S.simLoc || S.userLoc; }
+function renderCheckin(){
+  const v=VENUES.find(x=>x.id===S.checkin.venue);
+  const ev=v.events[0];
+  const loc=effLoc();
+  const dist=loc?haversine(loc,v):null;
+  const inRange=dist!=null && dist<=v.radius;
+  const youOffset=dist==null?54:Math.min(50,dist/6);
+  showSheet(`
+    <div class="eyebrow">CHECKING IN AT</div>
+    <div class="h2" style="margin-top:2px">${v.name}</div>
+
+    <div class="card" style="margin-top:14px;border-color:${inRange?'var(--me)':'var(--line)'}">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <span class="eyebrow">GEOFENCE · ${v.radius}m RADIUS</span>
+        <span style="font-size:11px;font-weight:700;color:${inRange?'var(--me)':'var(--dim)'}">${inRange?'● INSIDE':'○ OUTSIDE'}</span>
+      </div>
+      <div class="radar">
+        <div class="geo"></div>
+        ${inRange?'<div class="ping"></div>':''}
+        <div class="venuept"></div>
+        <div class="youpt" style="top:calc(50% - ${youOffset}px)"></div>
+      </div>
+      <div style="text-align:center;margin-top:4px">
+        ${dist==null
+          ? `<span style="color:var(--dim);font-size:13px">Locate yourself to measure distance</span>`
+          : `<span class="h2" style="color:${inRange?'var(--me)':'var(--text)'}">${dist}m</span><span style="color:var(--dim);font-size:12px"> from the door ${S.simLoc?'· simulated':'· live GPS'}</span>`}
+      </div>
+      <button class="btn sub" onclick="useGPS()">📡 ${S.userLoc&&!S.simLoc?'Re-check my location':'Use my real location (GPS)'}</button>
+      <button class="btn sub" onclick="jumpToVenue()" style="margin-top:8px">🧪 Jump to this venue (demo)</button>
+      ${S.simLoc?`<button class="btn sub" onclick="resetSim()" style="margin-top:8px">↺ Use real location instead</button>`:''}
+    </div>
+
+    <div class="${inRange?'':'lock'}" style="margin-top:16px">
+      <div class="eyebrow" style="margin-bottom:8px">${inRange?'WHOSE SET ARE YOU AT?':'🔒 GET WITHIN '+v.radius+'M TO UNLOCK'}</div>
+      ${ev.artists.map(a=>`<button class="opt ${a.name===S.checkin.artist?'on':''}" onclick="pickArtist('${a.name.replace(/'/g,"\\'")}')">
+        <span><b>${a.name}</b> <span style="color:var(--dim)">· ${GENRE[a.genre]}</span></span>${a.name===S.checkin.artist?'<span style="color:var(--me)">✓</span>':''}</button>`).join("")}
+      <button class="opt ${S.checkin.fullSet?'on':''}" onclick="toggleFull()" style="margin-top:4px">
+        <span>Stay for the full set <span style="color:var(--dim)">· dwell auto-verified (+25 XP)</span></span>
+        <span style="width:18px;height:18px;border-radius:5px;border:1px solid var(--line);background:${S.checkin.fullSet?'var(--me)':'transparent'};display:flex;align-items:center;justify-content:center;color:var(--ink)">${S.checkin.fullSet?'✓':''}</span>
+      </button>
+    </div>
+
+    <button class="btn" ${inRange?'':'disabled'} onclick="claim()">
+      ${inRange?'⚡ Claim '+S.checkin.artist : (dist==null?'🔒 Locate to check in':"🔒 You're "+(dist-v.radius)+"m too far")}
+    </button>
+  `);
+}
+function pickArtist(n){ S.checkin.artist=n; renderCheckin(); }
+function toggleFull(){ S.checkin.fullSet=!S.checkin.fullSet; renderCheckin(); }
+function jumpToVenue(){ const v=VENUES.find(x=>x.id===S.checkin.venue);
+  S.simLoc={lat:v.lat+0.0002, lng:v.lng}; renderCheckin(); }
+function resetSim(){ S.simLoc=null; renderCheckin(); }
+
+function useGPS(){
+  if(!navigator.geolocation){ alert("Geolocation not supported on this device."); return; }
+  S.simLoc=null;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ setUserLoc(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy); if(S.checkin) renderCheckin(); },
+    err=>{ alert("Couldn't get GPS: "+err.message+"\nUse the demo jump to test the flow."); },
+    {enableHighAccuracy:true, timeout:9000, maximumAge:0}
+  );
+}
+function setUserLoc(lat,lng,acc){
+  S.userLoc={lat,lng};
+  if(youMarker) map.removeLayer(youMarker);
+  if(youAccuracy) map.removeLayer(youAccuracy);
+  youMarker=L.marker([lat,lng],{icon:L.divIcon({className:"",html:'<div class="you you-pulse"></div>',iconSize:[16,16],iconAnchor:[8,8]})}).addTo(map);
+  if(acc) youAccuracy=L.circle([lat,lng],{radius:acc,color:CREWS[ME].color,weight:1,fillOpacity:.05}).addTo(map);
+}
+
+function claim(){
+  const v=VENUES.find(x=>x.id===S.checkin.venue);
+  const ev=v.events[0], artist=S.checkin.artist, fullSet=S.checkin.fullSet;
+  const genre=ARTIST_GENRE[artist];
+  const newArtist=!S.artists.has(artist), newVenue=!S.venues.has(v.id), newGenre=!S.genres.has(genre);
+  const lines=[{l:"Checked in (geofence verified)",p:50}];
+  if(fullSet) lines.push({l:"Stayed full set",p:25});
+  if(newArtist) lines.push({l:"First time: "+artist,p:30});
+  if(newVenue) lines.push({l:"New venue captured",p:40});
+  if(newGenre) lines.push({l:"Discovered "+GENRE[genre],p:35});
+  const gained=lines.reduce((a,b)=>a+b.p,0);
+
+  const before=leaderOf(v.control);
+  v.control[ME]=(v.control[ME]||0)+(fullSet?12:6);
+  v.fading=false;
+  if(shareOf(v.control,ME)>=shareOf(v.control,leaderOf(v.control))-3) v.mayor="you";
+  const flipped=before!==ME && leaderOf(v.control)===ME;
+
+  const earned=[];
+  if(newGenre && genre==="techno") earned.push("Techno Tourist");
+  if(newVenue) earned.push(v.hood.split(",")[0]+" Pioneer");
+  if(flipped) earned.push("Took "+v.name);
+
+  S.xp+=gained; S.artists.add(artist); S.venues.add(v.id); S.genres.add(genre);
+  earned.forEach(b=>S.badges.add(b)); S.city[ME]+=gained;
+
+  drawMarkers(); updateHeader(); hideSheet();
+  showReward({artist, venue:v.name, lines, gained, flipped, earned, share:shareOf(v.control,ME)});
+}
+
+// ---------------- reward ----------------
+const reward=document.getElementById("reward"), rewardBox=document.getElementById("rewardBox");
+function showReward(r){
+  rewardBox.innerHTML=`
+    <div style="text-align:center">
+      <div style="font-size:26px">✨</div>
+      <div class="h2" style="font-size:40px;color:var(--me);margin-top:6px">+${r.gained} XP</div>
+      <div style="color:var(--dim);font-size:12px;margin-top:4px">${r.artist} @ ${r.venue}</div>
+    </div>
+    <div style="margin-top:18px;display:flex;flex-direction:column;gap:6px">
+      ${r.lines.map(x=>`<div style="display:flex;justify-content:space-between;font-size:13px"><span>${x.l}</span><span class="mono" style="color:var(--me)">+${x.p}</span></div>`).join("")}
+    </div>
+    ${r.flipped?`<div style="margin-top:16px;padding:12px;border-radius:12px;background:var(--me);color:var(--ink);text-align:center;font-size:13px">🔥 <b>TERRITORY FLIPPED.</b> Your crew now leads — ${r.share}%.</div>`:''}
+    ${r.earned.length?`<div style="margin-top:14px"><div class="eyebrow" style="margin-bottom:6px">NEW BADGES</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">${r.earned.map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div></div>`:''}
+    <button class="btn" onclick="document.getElementById('reward').style.display='none'">Nice</button>`;
+  reward.style.display="flex";
+}
+
+// ---------------- header ----------------
+function updateHeader(){ const lvl=levelFor(S.xp); document.getElementById("hLvl").textContent=`LVL ${lvl} · ${RANKS[lvl-1]}`; }
+
+// ---------------- panels: what's on / passport / wars ----------------
+function renderWhatsOn(){
+  const flat=VENUES.flatMap(v=>v.events.map(e=>({v,e})));
+  document.getElementById("panelWhatsOn").innerHTML=`
+    <div style="padding:64px 2px 4px"><div class="h2" style="font-size:24px">WHAT'S ON</div></div>
+    <div class="sync" style="margin:6px 0 14px">↻ SYNCED FROM EDMTRAIN + RA · 2H AGO</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${VENUES.map(v=>{const lead=leaderOf(v.control),e=v.events[0];return `
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start">
+            <div><div class="h2" style="font-size:19px">${v.name}</div>
+              <div style="font-size:12px;font-weight:600;margin-top:4px">${e.artists.map(a=>a.name).join(" · ")}</div>
+              <div class="mono" style="font-size:9.5px;color:var(--dim);margin-top:2px">${e.date.toUpperCase()} · ${v.hood}</div></div>
+            <span style="font-size:10px;font-weight:700;color:${CREWS[lead].color};white-space:nowrap">${CREWS[lead].short} ${shareOf(v.control,lead)}%</span>
+          </div>
+          <div style="margin-top:10px">${ctrlbar(v.control)}</div>
+          <button class="btn ghost" style="margin-top:12px" onclick="setTab('map');setTimeout(()=>startCheckin('${v.id}'),250)">◎ Check in</button>
+        </div>`;}).join("")}
+    </div>`;
+}
+function renderPassport(){
+  const lvl=levelFor(S.xp), next=LEVELS[lvl]||LEVELS[LEVELS.length-1], prev=LEVELS[lvl-1]||0;
+  const pct=Math.min(100,Math.round((S.xp-prev)/(next-prev)*100)); const c=CREWS[ME].color;
+  document.getElementById("panelPassport").innerHTML=`
+    <div style="padding-top:60px"></div>
+    <div class="card" style="background:linear-gradient(135deg,${c}22,var(--ink2));border-color:${c}55">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div><div class="eyebrow">RAVE PASSPORT</div><div class="h2">@you</div>
+          <div style="font-size:12px;color:${c};font-weight:700">${CREWS[ME].name}</div></div>
+        <div style="text-align:right"><div class="h2" style="font-size:34px;color:${c}">LVL ${lvl}</div>
+          <div class="mono" style="font-size:10px;color:var(--dim)">${RANKS[lvl-1]}</div></div>
+      </div>
+      <div style="margin-top:14px">
+        <div class="mono" style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:5px"><span>${S.xp} XP</span><span>${next} XP → LVL ${lvl+1}</span></div>
+        <div style="height:8px;background:var(--ink3);border-radius:6px;overflow:hidden"><div style="width:${pct}%;height:100%;background:${c};box-shadow:0 0 10px ${c}"></div></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      ${[["ARTISTS SEEN",S.artists.size],["VENUES",S.venues.size],["GENRES",S.genres.size]].map(([l,n])=>`
+        <div class="card" style="flex:1;text-align:center;padding:12px 8px"><div class="h2" style="font-size:28px">${n}</div><div class="mono" style="font-size:8.5px;color:var(--dim);letter-spacing:1px;margin-top:4px">${l}</div></div>`).join("")}
+    </div>
+    <div class="eyebrow" style="margin:20px 0 10px">ARTIST COLLECTION</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      ${ALL_ARTISTS.map(a=>{const got=S.artists.has(a);return `
+        <div style="padding:10px 12px;border-radius:12px;border:1px solid ${got?'var(--line)':'transparent'};background:${got?'var(--ink2)':'#100E1A'};opacity:${got?1:.5}">
+          <div style="font-weight:700;font-size:13px">${got?a:'???'}</div>
+          <div class="mono" style="font-size:9px;color:var(--dim)">${got?GENRE[ARTIST_GENRE[a]].toUpperCase():'NOT SEEN LIVE'}</div></div>`;}).join("")}
+    </div>
+    <div class="eyebrow" style="margin:20px 0 10px">BADGES · ${S.badges.size}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${[...S.badges].map(b=>`<span class="pill">🏅 ${b}</span>`).join("")}</div>`;
+}
+function renderWars(){
+  const ranked=Object.entries(S.city).sort((a,b)=>b[1]-a[1]); const max=ranked[0][1];
+  const cities=[{n:"New York",p:Object.values(S.city).reduce((a,b)=>a+b,0),c:CREWS[ME].color,you:1},
+    {n:"Chicago",p:19140,c:"#FF3D81"},{n:"Denver",p:17880,c:"#9DFF3D"},{n:"Detroit",p:16320,c:"#FFB627"}].sort((a,b)=>b.p-a.p);
+  const cmax=cities[0].p;
+  document.getElementById("panelWars").innerHTML=`
+    <div style="padding-top:60px"></div>
+    <div class="h2" style="font-size:24px">NYC CREW WARS</div>
+    <div class="mono" style="font-size:10px;color:var(--dim);letter-spacing:1px;margin:2px 0 14px">SEASON ENDS IN 11 DAYS</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${ranked.map(([k,p],i)=>{const cc=CREWS[k],mine=k===ME;return `
+        <div class="card" style="background:${mine?cc.color+'14':'var(--ink2)'};border-color:${mine?cc.color:'var(--line)'}">
+          <div class="row"><span class="h2" style="font-size:20px;width:22px;color:${i===0?cc.color:'var(--dim)'}">${i+1}</span>
+            <span style="width:10px;height:10px;border-radius:10px;background:${cc.color}"></span>
+            <span style="flex:1;font-weight:700;font-size:14px">${cc.name}${mine?' (you)':''}</span>
+            <span class="mono" style="font-size:13px;color:${cc.color}">${p.toLocaleString()}</span></div>
+          <div style="margin-top:8px;height:6px;background:var(--ink3);border-radius:6px;overflow:hidden"><div style="width:${p/max*100}%;height:100%;background:${cc.color}"></div></div>
+        </div>`;}).join("")}
+    </div>
+    <div class="eyebrow" style="margin:26px 0 12px">CITY VS CITY</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      ${cities.map((c,i)=>`<div class="row"><span class="h2" style="font-size:16px;width:18px;color:var(--dim)">${i+1}</span>
+        <div style="flex:1"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="font-weight:700;color:${c.you?c.c:'var(--text)'}">${c.n}${c.you?' 🗽':''}</span>
+          <span class="mono" style="font-size:11px;color:var(--dim)">${c.p.toLocaleString()}</span></div>
+          <div style="height:8px;background:var(--ink3);border-radius:6px;overflow:hidden"><div style="width:${c.p/cmax*100}%;height:100%;background:${c.c};opacity:${c.you?1:.55}"></div></div>
+        </div></div>`).join("")}
+    </div>`;
+}
+
+// ---------------- tabs ----------------
+function setTab(t){
+  S.tab=t;
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===t));
+  ["WhatsOn","Passport","Wars"].forEach(p=>document.getElementById("panel"+p).classList.remove("open"));
+  hideSheet();
+  if(t==="map"){ map.invalidateSize(); return; }
+  if(t==="whatson"){ renderWhatsOn(); document.getElementById("panelWhatsOn").classList.add("open"); }
+  if(t==="passport"){ renderPassport(); document.getElementById("panelPassport").classList.add("open"); }
+  if(t==="wars"){ renderWars(); document.getElementById("panelWars").classList.add("open"); }
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>setTab(b.dataset.tab)));
+document.getElementById("fabLocate").addEventListener("click",()=>{
+  if(!navigator.geolocation){alert("Geolocation not supported.");return;}
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ setUserLoc(pos.coords.latitude,pos.coords.longitude,pos.coords.accuracy); map.flyTo([pos.coords.latitude,pos.coords.longitude],14,{duration:.6}); },
+    err=>alert("Couldn't get GPS: "+err.message),
+    {enableHighAccuracy:true,timeout:9000,maximumAge:0});
+});
+
+updateHeader();
+</script>
+</body>
+</html>

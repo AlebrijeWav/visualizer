@@ -1,0 +1,82 @@
+{
+  "_note": "Verified upcoming-lineup snapshot captured 2026-06-24. This WILL go stale; the sync worker (see docs/DATA-SOURCES.md) replaces it with live Edmtrain/RA data. control = points per crew; leader = max; share = leader/total. radius is geofence radius in meters. mayor 'you' marks the player as top contributor.",
+  "verifiedAt": "2026-06-24",
+  "genres": { "house": "House", "techno": "Techno", "disco": "Disco", "bass": "Bass", "dnb": "Drum & Bass" },
+  "venues": [
+    {
+      "id": "pacha", "name": "Pacha New York", "alias": "fka Brooklyn Mirage",
+      "hood": "East Williamsburg", "cap": "outdoor",
+      "address": "140 Stewart Ave, Brooklyn, NY 11237",
+      "lat": 40.7128, "lng": -73.9335, "geofenceRadius": 160, "fading": false,
+      "control": { "sundown": 41, "lowend": 22, "afterhours": 19, "bassline": 18 }, "mayor": "rave_orbit",
+      "sources": { "ra": "https://ra.co/clubs/105938" },
+      "events": [
+        { "date": "2026-06-26", "src": "ra.co", "artists": [ { "name": "Michael Bibi", "genre": "house" } ] },
+        { "date": "2026-06-27", "src": "ra.co", "artists": [ { "name": "Loud Luxury", "genre": "house" }, { "name": "Erik Vilar", "genre": "house" } ] },
+        { "date": "2026-07-03", "src": "ra.co", "artists": [ { "name": "Black Coffee", "genre": "house" } ] }
+      ]
+    },
+    {
+      "id": "knockdown", "name": "Knockdown Center",
+      "hood": "Maspeth, Queens", "cap": "warehouse",
+      "address": "52-19 Flushing Ave, Queens, NY 11378",
+      "lat": 40.7117, "lng": -73.9215, "geofenceRadius": 130, "fading": false,
+      "control": { "warehouse": 38, "afterhours": 27, "lowend": 20, "sundown": 15 }, "mayor": "concrete_kid",
+      "sources": { "ra": "https://ra.co/clubs/69401", "site": "https://www.knockdown.center/upcoming" },
+      "events": [
+        { "date": "2026-06-27", "src": "ra.co", "artists": [ { "name": "Gabrielle Kwarteng", "genre": "house" }, { "name": "isabella", "genre": "house" } ] },
+        { "date": "2026-07-18", "src": "ra.co", "artists": [ { "name": "Dixon", "genre": "techno" }, { "name": "Jimi Jules", "genre": "techno" }, { "name": "Trikk", "genre": "techno" } ] },
+        { "date": "2026-08-07", "src": "ra.co", "artists": [ { "name": "Charlotte de Witte", "genre": "techno" } ] }
+      ]
+    },
+    {
+      "id": "elsewhere", "name": "Elsewhere",
+      "hood": "Bushwick", "cap": "club",
+      "address": "599 Johnson Ave, Brooklyn, NY 11237",
+      "lat": 40.7069, "lng": -73.9231, "geofenceRadius": 90, "fading": false,
+      "control": { "lowend": 35, "sundown": 30, "bassline": 20, "afterhours": 15 }, "mayor": "you",
+      "sources": { "dice": "https://dice.fm/venue/elsewhere-brooklyn-8p85", "ra": "https://ra.co/clubs/139960" },
+      "events": [
+        { "date": "2026-07-10", "src": "dice.fm", "artists": [ { "name": "Eli Escobar", "genre": "disco" } ] },
+        { "date": "2026-07-18", "src": "dice.fm", "artists": [ { "name": "Young Franco", "genre": "house" } ] },
+        { "date": "2026-07-24", "src": "dice.fm", "artists": [ { "name": "Recondite", "genre": "techno" }, { "name": "Kanykei", "genre": "techno" }, { "name": "YokoO", "genre": "house" } ] }
+      ]
+    },
+    {
+      "id": "nowadays", "name": "Nowadays",
+      "hood": "Ridgewood", "cap": "outdoor",
+      "address": "56-06 Cooper Ave, Ridgewood, NY 11385",
+      "lat": 40.7095, "lng": -73.9085, "geofenceRadius": 120, "fading": false,
+      "control": { "afterhours": 44, "lowend": 24, "warehouse": 18, "sundown": 14 }, "mayor": "sunday_service",
+      "sources": { "ra": "https://ra.co/clubs/105873", "site": "https://nowadays.nyc" },
+      "events": [
+        { "date": "2026-06-28", "src": "ra.co", "artists": [ { "name": "Mister Sunday", "genre": "disco" } ] },
+        { "date": "2026-07-04", "src": "ra.co", "artists": [ { "name": "Underground Resistance", "genre": "techno" }, { "name": "Shinedoe", "genre": "techno" }, { "name": "Shyboi", "genre": "techno" } ] }
+      ]
+    },
+    {
+      "id": "publicrec", "name": "Public Records",
+      "hood": "Gowanus", "cap": "hi-fi club",
+      "address": "233 Butler St, Brooklyn, NY 11217",
+      "lat": 40.6800, "lng": -73.9860, "geofenceRadius": 70, "fading": false,
+      "control": { "bassline": 40, "lowend": 33, "afterhours": 27 }, "mayor": "low_theory",
+      "sources": { "ra": "https://ra.co/clubs/164270", "site": "https://publicrecords.nyc" },
+      "events": [
+        { "date": "2026-07-04", "src": "dice.fm", "artists": [ { "name": "Soul Summit", "genre": "house" }, { "name": "Shelter", "genre": "house" } ] },
+        { "date": "2026-07-05", "src": "dice.fm", "artists": [ { "name": "Louie Vega", "genre": "house" } ] }
+      ]
+    },
+    {
+      "id": "goodroom", "name": "Good Room",
+      "hood": "Greenpoint", "cap": "club",
+      "address": "98 Meserole Ave, Brooklyn, NY 11222",
+      "lat": 40.7300, "lng": -73.9505, "geofenceRadius": 80, "fading": true,
+      "control": { "lowend": 47, "bassline": 28, "sundown": 25 }, "mayor": "you",
+      "sources": { "ra": "https://ra.co/clubs/97606", "site": "https://www.goodroombk.com" },
+      "events": [
+        { "date": "2026-06-26", "src": "ra.co", "artists": [ { "name": "Kapote", "genre": "disco" }, { "name": "Barbara Boeing", "genre": "disco" } ] },
+        { "date": "2026-07-11", "src": "ra.co", "artists": [ { "name": "Bookworms", "genre": "techno" } ] }
+      ]
+    }
+  ]
+}
