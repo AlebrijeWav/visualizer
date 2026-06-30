@@ -1,0 +1,10 @@
+{
+  "playerCrew": "lowend",
+  "crews": {
+    "lowend":     { "name": "Low End Theory",   "short": "LET", "color": "#16E0C8" },
+    "sundown":    { "name": "Sundown Society",  "short": "SDS", "color": "#FF3D81" },
+    "afterhours": { "name": "After Hours Club", "short": "AHC", "color": "#B388FF" },
+    "bassline":   { "name": "Bassline Brigade", "short": "BSL", "color": "#FFB627" },
+    "warehouse":  { "name": "Warehouse Union",  "short": "WHU", "color": "#9DFF3D" }
+  }
+}

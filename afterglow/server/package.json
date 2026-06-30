@@ -1,0 +1,22 @@
+{
+  "name": "afterglow-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Afterglow Phase 1 backend — server-authoritative check-in API + sync/decay workers (Postgres + PostGIS).",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "migrate": "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f db/schema.sql",
+    "seed": "node src/seed.js",
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "worker": "node src/worker.js",
+    "sync": "node src/sync.js",
+    "decay": "node src/decay.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "pg": "^8.12.0"
+  }
+}
