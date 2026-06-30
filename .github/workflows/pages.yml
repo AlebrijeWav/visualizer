@@ -1,0 +1,37 @@
+name: Deploy Afterglow prototype to Pages
+
+# Publishes afterglow/prototype as a static site so the demo is clickable on a
+# real map (CARTO tiles + GPS work over the https Pages origin). The prototype
+# runs in its standalone/offline mode here — no backend required.
+
+on:
+  push:
+    branches: [claude/continue-previous-work-9dt6xr, main]
+    paths:
+      - "afterglow/prototype/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: afterglow/prototype
+      - id: deployment
+        uses: actions/deploy-pages@v4
