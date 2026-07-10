@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>List a Property — Queens Nest Realty</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="bar">
+    <a href="index.html">
+      <div class="logo">Queens<span>Nest</span> Realty</div>
+      <span class="logo-sub">Homes &amp; Rentals across Queens, NY</span>
+    </a>
+    <nav class="main-nav">
+      <a href="index.html">Listings</a>
+      <a href="index.html?listing_type=sale">Buy</a>
+      <a href="index.html?listing_type=rent">Rent</a>
+      <a href="admin.html" class="active">List a Property</a>
+    </nav>
+  </div>
+</header>
+
+<div class="admin-wrap">
+  <h1>List a property</h1>
+  <p class="sub">Add a new for-sale or for-rent listing. It will appear on the site immediately.</p>
+
+  <form class="admin-form" id="admin-form">
+    <div>
+      <label for="title">Listing title</label>
+      <input type="text" id="title" required placeholder="e.g. Sun-Filled Two-Bedroom" />
+    </div>
+
+    <div class="field-row">
+      <div>
+        <label for="neighborhood">Neighborhood</label>
+        <input type="text" id="neighborhood" required placeholder="e.g. Astoria" />
+      </div>
+      <div>
+        <label for="property_type">Property type</label>
+        <select id="property_type">
+          <option>Condo</option>
+          <option>Co-op</option>
+          <option>Single-Family</option>
+          <option>Multi-Family</option>
+          <option>Townhouse</option>
+          <option>Apartment</option>
+          <option>Loft</option>
+        </select>
+      </div>
+    </div>
+
+    <div>
+      <label for="address">Full address</label>
+      <input type="text" id="address" required placeholder="e.g. 31-15 30th Ave, Astoria, NY 11102" />
+    </div>
+
+    <div class="field-row">
+      <div>
+        <label for="listing_type">Listing type</label>
+        <select id="listing_type">
+          <option value="sale">For Sale</option>
+          <option value="rent">For Rent</option>
+        </select>
+      </div>
+      <div>
+        <label for="price">Price (USD)</label>
+        <input type="number" id="price" required min="0" step="1" placeholder="e.g. 3200" />
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div>
+        <label for="beds">Bedrooms</label>
+        <input type="number" id="beds" required min="0" step="1" placeholder="e.g. 2" />
+      </div>
+      <div>
+        <label for="baths">Bathrooms</label>
+        <input type="number" id="baths" required min="0" step="0.5" placeholder="e.g. 1.5" />
+      </div>
+    </div>
+
+    <div>
+      <label for="sqft">Square footage (optional)</label>
+      <input type="number" id="sqft" min="0" step="1" placeholder="e.g. 950" />
+    </div>
+
+    <div>
+      <label for="description">Description</label>
+      <textarea id="description" placeholder="Describe the property, nearby transit, notable features..."></textarea>
+    </div>
+
+    <label style="display:flex; align-items:center; gap:8px; font-size:13px;">
+      <input type="checkbox" id="featured" style="width:auto;" /> Feature this listing at the top of search results
+    </label>
+
+    <button type="submit">Publish Listing</button>
+    <div class="admin-msg" id="admin-msg"></div>
+  </form>
+
+  <div class="admin-list">
+    <h2>Current listings</h2>
+    <div id="listing-list"></div>
+  </div>
+</div>
+
+<script src="js/common.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

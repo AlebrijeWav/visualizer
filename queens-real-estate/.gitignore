@@ -1,0 +1,4 @@
+node_modules/
+server/listings.db
+server/listings.db-shm
+server/listings.db-wal

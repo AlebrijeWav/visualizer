@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Queens Nest Realty — Real Estate Listings in Queens, NY</title>
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="bar">
+    <a href="index.html">
+      <div class="logo">Queens<span>Nest</span> Realty</div>
+      <span class="logo-sub">Homes &amp; Rentals across Queens, NY</span>
+    </a>
+    <nav class="main-nav">
+      <a href="index.html" class="active">Listings</a>
+      <a href="index.html?listing_type=sale">Buy</a>
+      <a href="index.html?listing_type=rent">Rent</a>
+      <a href="admin.html">List a Property</a>
+    </nav>
+  </div>
+</header>
+
+<section class="hero">
+  <div class="hero-inner">
+    <h1>Find your next home <em>in Queens</em></h1>
+    <p>Browse for-sale and rental listings across Astoria, Long Island City, Flushing, Forest Hills, and every neighborhood in between.</p>
+
+    <form class="filter-bar" id="filter-form">
+      <input type="text" name="q" placeholder="Search address, neighborhood, or keyword…" />
+      <select name="neighborhood" id="neighborhood-select">
+        <option value="">All neighborhoods</option>
+      </select>
+      <select name="listing_type">
+        <option value="">Buy or Rent</option>
+        <option value="sale">For Sale</option>
+        <option value="rent">For Rent</option>
+      </select>
+      <select name="beds">
+        <option value="">Any beds</option>
+        <option value="1">1+ bed</option>
+        <option value="2">2+ beds</option>
+        <option value="3">3+ beds</option>
+        <option value="4">4+ beds</option>
+      </select>
+      <input type="number" name="maxPrice" placeholder="Max price" min="0" step="1000" />
+      <button type="submit">Search</button>
+    </form>
+  </div>
+</section>
+
+<section class="results-section container">
+  <div class="results-head">
+    <h2 id="results-title">All listings</h2>
+    <div style="display:flex; align-items:center; gap:14px;">
+      <span class="results-count" id="results-count"></span>
+      <select class="sort-select" id="sort-select">
+        <option value="">Sort: Featured</option>
+        <option value="price_asc">Price: Low to High</option>
+        <option value="price_desc">Price: High to Low</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid" id="grid"></div>
+</section>
+
+<footer class="site-footer">
+  Queens Nest Realty — demo listings for Astoria, Long Island City, Ridgewood, Jackson Heights, Elmhurst, Forest Hills, Rego Park, Flushing, Bayside, Douglaston &amp; Sunnyside, Queens, NY.
+</footer>
+
+<script src="js/common.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
